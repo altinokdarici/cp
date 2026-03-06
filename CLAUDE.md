@@ -51,6 +51,10 @@ Two crates in a Rust workspace (edition 2024):
 
 Use conventional commits (e.g., `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `chore:`, `docs:`). Always single-line commit messages. No AI attribution — do not add "Co-Authored-By" or any AI tool references.
 
+## Pull Requests
+
+Each PR should fix a single issue or add a single feature. Do not bundle unrelated changes into one PR. This keeps reviews focused, bisection easy, and reverts safe.
+
 ## Performance
 
 A custom agent exists at `.claude/agents/perf-expert.md` for performance analysis. The benchmark (`benches/compile_bench.rs`) generates synthetic packages of varying sizes (20/100/500 modules) and measures end-to-end compile time.

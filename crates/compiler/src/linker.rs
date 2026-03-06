@@ -219,7 +219,10 @@ fn strip_imports(source: &str) -> String {
         // Strip `export * from './...'` and `export { x } from './...'` for internal modules.
         let is_internal_reexport = trimmed.starts_with("export ")
             && trimmed.contains(" from ")
-            && (trimmed.contains("from \"./") || trimmed.contains("from '../"));
+            && (trimmed.contains("from \"./")
+                || trimmed.contains("from './")
+                || trimmed.contains("from \"../")
+                || trimmed.contains("from '../"));
         if !is_import && !is_internal_reexport {
             output.push_str(line);
             output.push('\n');
