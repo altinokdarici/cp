@@ -109,8 +109,8 @@ fn test_multi_entry_with_shared_chunks() {
 }
 
 #[test]
-fn test_circular_dependency_fails() {
-    // Create a temp directory with circular imports.
+fn test_circular_dependency_succeeds() {
+    // Circular imports are valid in JS/TS and should compile successfully.
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
 
@@ -141,9 +141,18 @@ export const b: string = 'b' + a;"#,
         entries: vec![PathBuf::from("src/a.ts")],
     });
 
-    assert!(result.is_err(), "Should fail on circular dependency");
     assert!(
-        result.unwrap_err().contains("Circular"),
-        "Error should mention circular dependency"
+        result.is_ok(),
+        "Circular dependencies should compile successfully"
+    );
+
+    let output = result.unwrap();
+    assert_eq!(output.files.len(), 1, "Should produce one output file");
+    // Both modules should be included in the output.
+    let content = &output.files[0].content;
+    assert!(
+        content.contains("a") && content.contains("b"),
+        "Should contain content from both modules, got: {}",
+        content
     );
 }
