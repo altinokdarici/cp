@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772829009162,
+  "lastUpdate": 1772829396406,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -155,6 +155,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 27023310,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dbca05d6f228c47d60099626930787758a99f274",
+          "message": "fix: correct quote handling in strip_imports, fix test assertions (#4)",
+          "timestamp": "2026-03-06T12:36:05-08:00",
+          "tree_id": "d8341a41a2b05347da98c17c404ee8d6991fdf78",
+          "url": "https://github.com/altinokdarici/cp/commit/dbca05d6f228c47d60099626930787758a99f274"
+        },
+        "date": 1772829395560,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 1222927,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 5703537,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 26330828,
             "unit": "ns/iter"
           }
         ]
