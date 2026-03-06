@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772832851307,
+  "lastUpdate": 1772834202949,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -233,6 +233,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 28696417,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ebf78de39b12e151d0d8869046d256c5de8d46a",
+          "message": "feat: add optional source map generation (#6)\n\nAdd source_maps: bool to CompileOptions. When enabled, per-module source\nmaps are generated during codegen (both Phase 1 and Phase 2 paths) and\nconcatenated in the linker using ConcatSourceMapBuilder with correct line\noffsets. Output files get sourceMappingURL comments appended and the CLI\nwrites .map files alongside .js files via --source-maps flag.",
+          "timestamp": "2026-03-06T13:56:12-08:00",
+          "tree_id": "67bc283c2974c8dc242f94ab7ff7a698c76e2abe",
+          "url": "https://github.com/altinokdarici/cp/commit/4ebf78de39b12e151d0d8869046d256c5de8d46a"
+        },
+        "date": 1772834202164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 1238165,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 5467646,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 26619649,
             "unit": "ns/iter"
           }
         ]
