@@ -150,16 +150,11 @@ fn discover_module(
         .canonicalize()
         .map_err(|e| format!("Failed to canonicalize {}: {e}", abs_path.display()))?;
 
-    if discovered.contains_key(&canonical) {
+    if discovered.contains_key(&canonical) || visiting.contains(&canonical) {
         return Ok(());
     }
 
-    if !visiting.insert(canonical.clone()) {
-        return Err(format!(
-            "Circular dependency detected: {}",
-            canonical.display()
-        ));
-    }
+    visiting.insert(canonical.clone());
 
     let raw_content = std::fs::read_to_string(&canonical)
         .map_err(|e| format!("Failed to read {}: {e}", canonical.display()))?;
