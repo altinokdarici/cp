@@ -184,6 +184,7 @@ dependencies = [
 name = "compiler"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "lightningcss",
  "oxc_allocator",
  "oxc_ast",
