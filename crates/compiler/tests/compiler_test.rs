@@ -307,3 +307,94 @@ export const b: string = 'b' + a;"#,
         content
     );
 }
+
+#[test]
+fn test_multiline_imports_are_stripped() {
+    // Multi-line imports should be correctly stripped at the AST level.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+
+    std::fs::write(
+        root.join("package.json"),
+        r#"{"name": "multiline-pkg", "version": "1.0.0"}"#,
+    )
+    .unwrap();
+
+    std::fs::create_dir_all(root.join("src")).unwrap();
+
+    std::fs::write(
+        root.join("src/helpers.ts"),
+        "export const foo: string = 'foo';\nexport const bar: string = 'bar';\n",
+    )
+    .unwrap();
+
+    // Entry with a multi-line import and multi-line re-export.
+    std::fs::write(
+        root.join("src/index.ts"),
+        r#"import {
+  foo,
+  bar
+} from './helpers';
+
+export {
+  foo,
+  bar
+} from './helpers';
+
+import {
+  createElement
+} from 'react';
+
+export const result: string = foo + bar;
+"#,
+    )
+    .unwrap();
+
+    let result = compile(CompileOptions {
+        package_root: root.to_path_buf(),
+        entries: vec![PathBuf::from("src/index.ts")],
+    })
+    .expect("Compilation should succeed");
+
+    let entry = &result.files[0];
+
+    // The multi-line internal import should be fully stripped.
+    assert!(
+        !entry.content.contains("from './helpers'"),
+        "Internal imports should be stripped, got:\n{}",
+        entry.content
+    );
+    assert!(
+        !entry.content.contains("from \"./helpers\""),
+        "Internal imports should be stripped (double quotes), got:\n{}",
+        entry.content
+    );
+
+    // The multi-line external import should also be stripped (linker re-adds externals).
+    assert!(
+        !entry.content.contains("createElement"),
+        "Original external import should be stripped (linker re-adds), got:\n{}",
+        entry.content
+    );
+
+    // The function body should still be present.
+    assert!(
+        entry.content.contains("result"),
+        "Should contain the result export, got:\n{}",
+        entry.content
+    );
+
+    // Content from helpers should be inlined.
+    assert!(
+        entry.content.contains("foo"),
+        "Should contain helpers content, got:\n{}",
+        entry.content
+    );
+
+    // react should be detected as external.
+    assert!(
+        result.manifest.externals.contains(&"react".to_string()),
+        "Should detect 'react' as external, got: {:?}",
+        result.manifest.externals
+    );
+}

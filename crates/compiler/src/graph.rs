@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
-use oxc_ast::ast::{ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration};
+use oxc_ast::ast::{
+    ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration, Program, Statement,
+};
 use oxc_ast_visit::Visit;
 use oxc_codegen::Codegen;
 use oxc_parser::Parser;
@@ -93,8 +95,8 @@ pub fn build_module_graph(entries: &[PathBuf], package_root: &Path) -> Result<Mo
         resolved_entries.push(resolved);
     }
 
-    // Phase 2: Transform + codegen.
-    // Use parallel processing only when enough modules need transformation to justify rayon overhead.
+    // Phase 2: Transform + codegen (only for modules needing TS/JSX transform).
+    // Non-transform modules were already stripped+codegen'd in Phase 1.
     let transform_count = discovered.values().filter(|d| d.needs_transform).count();
     let modules: HashMap<PathBuf, Module> = if transform_count >= 32 {
         // Parallel path: rayon distributes transform+codegen across CPU cores.
@@ -161,10 +163,11 @@ fn discover_module(
 
     let load_result = loader::load(&canonical, raw_content)?;
 
-    // Parse for import extraction only (lightweight — no transform/codegen here).
+    // Parse for import extraction. For non-transform modules, we also strip imports
+    // and codegen here to avoid a redundant re-parse in Phase 2.
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(&canonical).unwrap_or_default();
-    let parsed = Parser::new(&allocator, &load_result.source, source_type).parse();
+    let mut parsed = Parser::new(&allocator, &load_result.source, source_type).parse();
 
     if parsed.panicked {
         return Err(format!("Parse error in {}", canonical.display()));
@@ -206,11 +209,25 @@ fn discover_module(
         }
     }
 
+    // For non-transform modules, strip imports and codegen now (reusing the Phase 1 parse).
+    // Transform modules keep raw source for Phase 2 (parallel transform+strip+codegen).
+    // Modules with no imports at all skip stripping entirely — use raw source directly.
+    let has_imports = !internal_imports.is_empty() || !external_imports.is_empty();
+    let source = if !load_result.needs_transform && has_imports {
+        // Non-transform module with imports: strip+codegen now, reusing the Phase 1 parse.
+        strip_ast_imports(&mut parsed.program);
+        Codegen::new().build(&parsed.program).code
+    } else {
+        // Transform modules keep raw source for Phase 2.
+        // Modules with no imports need no stripping — use raw source directly.
+        load_result.source
+    };
+
     discovered.insert(
         canonical.clone(),
         DiscoveredModule {
             path: canonical.clone(),
-            source: load_result.source,
+            source,
             needs_transform: load_result.needs_transform,
             internal_imports,
             external_imports,
@@ -221,7 +238,9 @@ fn discover_module(
     Ok(())
 }
 
-/// Convert a discovered module into its final form (transform if needed).
+/// Convert a discovered module into its final form.
+/// Non-transform modules already have their final source from Phase 1.
+/// Transform modules go through parse → transform → strip → codegen here.
 fn finish_module(key: PathBuf, disc: DiscoveredModule) -> Result<(PathBuf, Module), String> {
     let js_source = if disc.needs_transform {
         transform_and_codegen(&disc.path, &disc.source)?
@@ -238,7 +257,8 @@ fn finish_module(key: PathBuf, disc: DiscoveredModule) -> Result<(PathBuf, Modul
     ))
 }
 
-/// Parse + transform + codegen for a single module (called in parallel for large graphs).
+/// Parse → transform TS/JSX → strip import/re-export AST nodes → codegen.
+/// Only called for modules that need TS/JSX transformation.
 fn transform_and_codegen(path: &Path, source: &str) -> Result<String, String> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(path).unwrap_or_default();
@@ -267,7 +287,25 @@ fn transform_and_codegen(path: &Path, source: &str) -> Result<String, String> {
         ));
     }
 
+    strip_ast_imports(&mut parsed.program);
+
     Ok(Codegen::new().build(&parsed.program).code)
+}
+
+/// Remove import declarations and internal re-export-from nodes from the AST.
+fn strip_ast_imports(program: &mut Program<'_>) {
+    program.body.retain(|stmt| match stmt {
+        // Remove ALL import declarations (the linker re-adds externals).
+        Statement::ImportDeclaration(_) => false,
+        // Remove internal `export * from './...'` re-exports; keep external ones.
+        Statement::ExportAllDeclaration(decl) => !is_relative_import(decl.source.value.as_str()),
+        // Remove internal `export { x } from './...'` re-exports; keep direct exports and external re-exports.
+        Statement::ExportNamedDeclaration(decl) => match &decl.source {
+            Some(source) => !is_relative_import(source.value.as_str()),
+            None => true,
+        },
+        _ => true,
+    });
 }
 
 fn is_relative_import(specifier: &str) -> bool {
