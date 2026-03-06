@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772827863367,
+  "lastUpdate": 1772828376874,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -77,6 +77,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 26297156,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b9ca9e9360a1898b48581b32aaa50c97472adfe",
+          "message": "fix: trace export re-exports as module dependencies (#2)",
+          "timestamp": "2026-03-06T12:19:07-08:00",
+          "tree_id": "e7a79db9cca14b4c134747f5739eacbdcf2b9b51",
+          "url": "https://github.com/altinokdarici/cp/commit/5b9ca9e9360a1898b48581b32aaa50c97472adfe"
+        },
+        "date": 1772828376467,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 1279247,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 5633865,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 28238018,
             "unit": "ns/iter"
           }
         ]
