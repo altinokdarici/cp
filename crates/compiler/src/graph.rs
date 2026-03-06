@@ -6,7 +6,7 @@ use oxc_ast::ast::{
     ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration, Program, Statement,
 };
 use oxc_ast_visit::Visit;
-use oxc_codegen::Codegen;
+use oxc_codegen::{Codegen, CodegenOptions};
 use oxc_parser::Parser;
 use oxc_resolver::{ResolveOptions, Resolver};
 use oxc_semantic::SemanticBuilder;
@@ -25,6 +25,8 @@ pub struct Module {
     pub external_imports: Vec<String>,
     /// Transformed JS source.
     pub js_source: String,
+    /// Per-module source map (present when source_maps is enabled and codegen ran).
+    pub source_map: Option<oxc_sourcemap::SourceMap>,
 }
 
 /// The complete internal module graph for a package.
@@ -43,13 +45,18 @@ struct DiscoveredModule {
     needs_transform: bool,
     internal_imports: Vec<PathBuf>,
     external_imports: Vec<String>,
+    source_map: Option<oxc_sourcemap::SourceMap>,
 }
 
 /// Build the module graph starting from the given entry file paths.
 ///
 /// Phase 1 (sequential): Read files, parse for import extraction, resolve dependencies.
 /// Phase 2 (parallel): Transform TS/JSX and codegen across all CPU cores via rayon.
-pub fn build_module_graph(entries: &[PathBuf], package_root: &Path) -> Result<ModuleGraph, String> {
+pub fn build_module_graph(
+    entries: &[PathBuf],
+    package_root: &Path,
+    source_maps: bool,
+) -> Result<ModuleGraph, String> {
     let canonical_root = package_root.canonicalize().map_err(|e| {
         format!(
             "Failed to canonicalize package root {}: {e}",
@@ -91,6 +98,7 @@ pub fn build_module_graph(entries: &[PathBuf], package_root: &Path) -> Result<Mo
             &canonical_root,
             &mut discovered,
             &mut visiting,
+            source_maps,
         )?;
         resolved_entries.push(resolved);
     }
@@ -102,13 +110,13 @@ pub fn build_module_graph(entries: &[PathBuf], package_root: &Path) -> Result<Mo
         // Parallel path: rayon distributes transform+codegen across CPU cores.
         discovered
             .into_par_iter()
-            .map(|(key, disc)| finish_module(key, disc))
+            .map(|(key, disc)| finish_module(key, disc, source_maps))
             .collect::<Result<_, String>>()?
     } else {
         // Sequential path: avoids rayon overhead for small graphs.
         discovered
             .into_iter()
-            .map(|(key, disc)| finish_module(key, disc))
+            .map(|(key, disc)| finish_module(key, disc, source_maps))
             .collect::<Result<_, String>>()?
     };
 
@@ -147,6 +155,7 @@ fn discover_module(
     canonical_root: &Path,
     discovered: &mut HashMap<PathBuf, DiscoveredModule>,
     visiting: &mut HashSet<PathBuf>,
+    source_maps: bool,
 ) -> Result<(), String> {
     let canonical = abs_path
         .canonicalize()
@@ -200,6 +209,7 @@ fn discover_module(
                     canonical_root,
                     discovered,
                     visiting,
+                    source_maps,
                 )?;
             } else {
                 external_imports.push(specifier.to_string());
@@ -213,14 +223,26 @@ fn discover_module(
     // Transform modules keep raw source for Phase 2 (parallel transform+strip+codegen).
     // Modules with no imports at all skip stripping entirely — use raw source directly.
     let has_imports = !internal_imports.is_empty() || !external_imports.is_empty();
-    let source = if !load_result.needs_transform && has_imports {
+    let (source, source_map) = if !load_result.needs_transform && has_imports {
         // Non-transform module with imports: strip+codegen now, reusing the Phase 1 parse.
         strip_ast_imports(&mut parsed.program);
-        Codegen::new().build(&parsed.program).code
+        if source_maps {
+            let options = CodegenOptions {
+                source_map_path: Some(canonical.clone()),
+                ..Default::default()
+            };
+            let result = Codegen::new()
+                .with_options(options)
+                .with_source_text(&load_result.source)
+                .build(&parsed.program);
+            (result.code, result.map)
+        } else {
+            (Codegen::new().build(&parsed.program).code, None)
+        }
     } else {
         // Transform modules keep raw source for Phase 2.
         // Modules with no imports need no stripping — use raw source directly.
-        load_result.source
+        (load_result.source, None)
     };
 
     discovered.insert(
@@ -231,6 +253,7 @@ fn discover_module(
             needs_transform: load_result.needs_transform,
             internal_imports,
             external_imports,
+            source_map,
         },
     );
 
@@ -241,11 +264,15 @@ fn discover_module(
 /// Convert a discovered module into its final form.
 /// Non-transform modules already have their final source from Phase 1.
 /// Transform modules go through parse → transform → strip → codegen here.
-fn finish_module(key: PathBuf, disc: DiscoveredModule) -> Result<(PathBuf, Module), String> {
-    let js_source = if disc.needs_transform {
-        transform_and_codegen(&disc.path, &disc.source)?
+fn finish_module(
+    key: PathBuf,
+    disc: DiscoveredModule,
+    source_maps: bool,
+) -> Result<(PathBuf, Module), String> {
+    let (js_source, source_map) = if disc.needs_transform {
+        transform_and_codegen(&disc.path, &disc.source, source_maps)?
     } else {
-        disc.source
+        (disc.source, disc.source_map)
     };
     Ok((
         key,
@@ -253,13 +280,18 @@ fn finish_module(key: PathBuf, disc: DiscoveredModule) -> Result<(PathBuf, Modul
             internal_imports: disc.internal_imports,
             external_imports: disc.external_imports,
             js_source,
+            source_map,
         },
     ))
 }
 
 /// Parse → transform TS/JSX → strip import/re-export AST nodes → codegen.
 /// Only called for modules that need TS/JSX transformation.
-fn transform_and_codegen(path: &Path, source: &str) -> Result<String, String> {
+fn transform_and_codegen(
+    path: &Path,
+    source: &str,
+    source_maps: bool,
+) -> Result<(String, Option<oxc_sourcemap::SourceMap>), String> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(path).unwrap_or_default();
     let mut parsed = Parser::new(&allocator, source, source_type).parse();
@@ -289,7 +321,19 @@ fn transform_and_codegen(path: &Path, source: &str) -> Result<String, String> {
 
     strip_ast_imports(&mut parsed.program);
 
-    Ok(Codegen::new().build(&parsed.program).code)
+    if source_maps {
+        let options = CodegenOptions {
+            source_map_path: Some(path.to_path_buf()),
+            ..Default::default()
+        };
+        let codegen_result = Codegen::new()
+            .with_options(options)
+            .with_source_text(source)
+            .build(&parsed.program);
+        Ok((codegen_result.code, codegen_result.map))
+    } else {
+        Ok((Codegen::new().build(&parsed.program).code, None))
+    }
 }
 
 /// Remove import declarations and internal re-export-from nodes from the AST.

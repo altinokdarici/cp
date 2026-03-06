@@ -128,6 +128,7 @@ fn main() {
         compile(CompileOptions {
             package_root: small_root.clone(),
             entries: small_entries.clone(),
+            source_maps: false,
         })
         .unwrap();
     }));
@@ -144,6 +145,7 @@ fn main() {
         compile(CompileOptions {
             package_root: medium_root.clone(),
             entries: medium_entries.clone(),
+            source_maps: false,
         })
         .unwrap();
     }));
@@ -160,6 +162,7 @@ fn main() {
         compile(CompileOptions {
             package_root: large_root.clone(),
             entries: large_entries.clone(),
+            source_maps: false,
         })
         .unwrap();
     }));

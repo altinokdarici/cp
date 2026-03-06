@@ -12,6 +12,8 @@ pub struct CompileOptions {
     pub package_root: PathBuf,
     /// Entry file paths relative to package_root.
     pub entries: Vec<PathBuf>,
+    /// Whether to generate source maps for output files.
+    pub source_maps: bool,
 }
 
 /// A single output file produced by the compiler.
@@ -52,7 +54,8 @@ pub struct CompileOutput {
 /// 3. Return the output files + manifest.
 pub fn compile(options: CompileOptions) -> Result<CompileOutput, String> {
     // Step 1: Build module graph.
-    let module_graph = graph::build_module_graph(&options.entries, &options.package_root)?;
+    let module_graph =
+        graph::build_module_graph(&options.entries, &options.package_root, options.source_maps)?;
 
     // Collect all external imports across the graph (HashSet for O(1) dedup).
     let mut externals_set: HashSet<String> = HashSet::new();
@@ -65,7 +68,7 @@ pub fn compile(options: CompileOptions) -> Result<CompileOutput, String> {
     externals.sort();
 
     // Step 2: Link into output files.
-    let files = linker::link(&module_graph, &options.package_root)?;
+    let files = linker::link(&module_graph, &options.package_root, options.source_maps)?;
 
     // Step 3: Build manifest.
     let mut entries = Vec::new();
