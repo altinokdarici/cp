@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772829396406,
+  "lastUpdate": 1772832851307,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -194,6 +194,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 26330828,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a105692a4d118d1facf7f90f8ed9fe1560a6dc1",
+          "message": "refactor: strip imports at AST level instead of string matching (#5)",
+          "timestamp": "2026-03-06T13:33:44-08:00",
+          "tree_id": "0900cade2dafab7c86cdf71e450a6204b7ed0929",
+          "url": "https://github.com/altinokdarici/cp/commit/4a105692a4d118d1facf7f90f8ed9fe1560a6dc1"
+        },
+        "date": 1772832851017,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 1243103,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 5414894,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 28696417,
             "unit": "ns/iter"
           }
         ]
