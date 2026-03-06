@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
+mod asset;
 mod css;
 mod css_module;
 mod graphql;
@@ -8,6 +9,7 @@ mod js;
 mod json;
 mod text;
 
+pub use asset::AssetLoader;
 pub use css::CssLoader;
 pub use css_module::CssModuleLoader;
 pub use graphql::GraphQlLoader;
@@ -27,6 +29,11 @@ pub struct LoadResult {
 pub trait Loader: Send + Sync {
     /// File extensions this loader handles (without leading dot).
     fn extensions(&self) -> &[&str];
+
+    /// Whether this loader handles binary files (reads bytes itself instead of String).
+    fn is_binary(&self) -> bool {
+        false
+    }
 
     /// Load a file and return JavaScript source code.
     fn load(&self, path: &Path, content: String) -> Result<LoadResult, String>;
@@ -57,6 +64,11 @@ impl LoaderRegistry {
             self.extension_map.insert(ext.to_string(), idx);
         }
         self.loaders.push(loader);
+    }
+
+    /// Return all registered simple extensions (without leading dot).
+    pub fn extensions(&self) -> impl Iterator<Item = &str> {
+        self.extension_map.keys().map(|s| s.as_str())
     }
 
     pub fn loader_for(&self, path: &Path) -> Option<&dyn Loader> {
@@ -122,5 +134,6 @@ pub fn default_registry() -> LoaderRegistry {
     registry.register(Box::new(CssLoader));
     registry.register(Box::new(GraphQlLoader));
     registry.register(Box::new(TextLoader));
+    registry.register(Box::new(AssetLoader));
     registry
 }

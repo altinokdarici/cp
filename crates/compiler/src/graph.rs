@@ -89,17 +89,28 @@ pub fn build_module_graph(
         )
     })?;
 
+    // Core extensions that the resolver tries for extensionless imports.
+    let mut extensions: Vec<String> = vec![
+        ".ts".into(),
+        ".tsx".into(),
+        ".mts".into(),
+        ".js".into(),
+        ".jsx".into(),
+        ".mjs".into(),
+        ".json".into(),
+        ".css".into(),
+    ];
+    // Append all loader-registered extensions (assets, etc.) so the resolver
+    // can find them without duplicating the list here.
+    for ext in registry.extensions() {
+        let dotted = format!(".{ext}");
+        if !extensions.contains(&dotted) {
+            extensions.push(dotted);
+        }
+    }
+
     let resolver = Resolver::new(ResolveOptions {
-        extensions: vec![
-            ".ts".into(),
-            ".tsx".into(),
-            ".mts".into(),
-            ".js".into(),
-            ".jsx".into(),
-            ".mjs".into(),
-            ".json".into(),
-            ".css".into(),
-        ],
+        extensions,
         main_fields: vec!["module".into(), "main".into()],
         condition_names: vec!["import".into(), "default".into()],
         ..Default::default()
@@ -195,26 +206,29 @@ fn discover_module(
 
     visiting.insert(abs_path.to_path_buf());
 
-    let raw_content = std::fs::read_to_string(abs_path)
-        .map_err(|e| format!("Failed to read {}: {e}", abs_path.display()))?;
-
     let loader = registry.loader_for(abs_path).ok_or_else(|| {
         let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
         format!("Unsupported file type: .{ext}")
     })?;
 
+    let raw_content = if loader.is_binary() {
+        String::new()
+    } else {
+        std::fs::read_to_string(abs_path)
+            .map_err(|e| format!("Failed to read {}: {e}", abs_path.display()))?
+    };
+
     let load_result = loader.load(abs_path, raw_content)?;
 
-    // Modules needing loader transform (e.g., CSS modules) store raw content — skip JS parsing.
-    // They have no JS imports to extract.
-    if load_result.needs_loader_transform {
+    // Binary assets and loader-transform modules have no JS imports to extract — skip parsing.
+    if loader.is_binary() || load_result.needs_loader_transform {
         let owned_path = visiting.take(abs_path).unwrap();
         discovered.insert(
             owned_path,
             DiscoveredModule {
                 source: load_result.js_source,
                 needs_transform: false,
-                needs_loader_transform: true,
+                needs_loader_transform: load_result.needs_loader_transform,
                 internal_imports: Vec::new(),
                 external_imports: Vec::new(),
                 source_map: None,

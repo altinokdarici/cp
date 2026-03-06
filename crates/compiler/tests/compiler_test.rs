@@ -1137,3 +1137,232 @@ fn integration_css_modules_pkg() {
         package_root.join("dist").display()
     );
 }
+
+#[test]
+fn test_asset_png_import() {
+    let temp = temp_package("asset-png-pkg");
+    let root = temp.path();
+
+    // Write a minimal valid PNG (1x1 pixel, 67 bytes).
+    let png_bytes: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77,
+        0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF,
+        0xC0, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00, 0x00, 0x00, 0x00,
+        0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    std::fs::write(root.join("src/logo.png"), png_bytes).unwrap();
+
+    std::fs::write(
+        root.join("src/index.ts"),
+        "import logo from './logo.png';\nexport const img: string = logo;\n",
+    )
+    .unwrap();
+
+    let result = compile(CompileOptions {
+        package_root: root.to_path_buf(),
+        entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
+    })
+    .expect("Asset PNG import should compile");
+
+    let entry = &result.files[0];
+
+    assert!(
+        entry.content.contains("data:image/png;base64,"),
+        "Should contain PNG data URL, got:\n{}",
+        entry.content
+    );
+    // Should still have the img export.
+    assert!(
+        entry.content.contains("img"),
+        "Should contain img export, got:\n{}",
+        entry.content
+    );
+}
+
+#[test]
+fn test_asset_font_import() {
+    let temp = temp_package("asset-font-pkg");
+    let root = temp.path();
+
+    // Write some fake WOFF2 bytes (doesn't need to be valid for this test).
+    std::fs::write(root.join("src/font.woff2"), b"wOF2fake-font-data").unwrap();
+
+    std::fs::write(
+        root.join("src/index.ts"),
+        "import font from './font.woff2';\nexport const f: string = font;\n",
+    )
+    .unwrap();
+
+    let result = compile(CompileOptions {
+        package_root: root.to_path_buf(),
+        entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
+    })
+    .expect("Asset WOFF2 import should compile");
+
+    let entry = &result.files[0];
+
+    assert!(
+        entry.content.contains("data:font/woff2;base64,"),
+        "Should contain WOFF2 data URL, got:\n{}",
+        entry.content
+    );
+}
+
+#[test]
+fn test_asset_shared_chunk() {
+    let temp = temp_package("asset-shared-pkg");
+    let root = temp.path();
+
+    // Shared image imported by both entries.
+    let png_bytes: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+        0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8,
+        0xCF, 0xC0, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00, 0x00, 0x00,
+        0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    std::fs::write(root.join("src/shared.png"), png_bytes).unwrap();
+
+    std::fs::write(
+        root.join("src/entryA.ts"),
+        "import logo from './shared.png';\nexport const a: string = logo;\n",
+    )
+    .unwrap();
+
+    std::fs::write(
+        root.join("src/entryB.ts"),
+        "import logo from './shared.png';\nexport const b: string = logo;\n",
+    )
+    .unwrap();
+
+    let result = compile(CompileOptions {
+        package_root: root.to_path_buf(),
+        entries: vec![
+            PathBuf::from("src/entryA.ts"),
+            PathBuf::from("src/entryB.ts"),
+        ],
+        source_maps: false,
+    })
+    .expect("Shared asset import should compile");
+
+    // The image module is shared → should be in a shared chunk.
+    let chunk = result.files.iter().find(|f| f.name.starts_with("chunk-"));
+    assert!(
+        chunk.is_some(),
+        "Shared image should produce a shared chunk, files: {:?}",
+        result.files.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+
+    let chunk = chunk.unwrap();
+    assert!(
+        chunk.content.contains("data:image/png;base64,"),
+        "Shared chunk should contain PNG data URL, got:\n{}",
+        chunk.content
+    );
+}
+
+#[test]
+fn test_asset_multiple_types() {
+    let temp = temp_package("asset-multi-pkg");
+    let root = temp.path();
+
+    // PNG
+    let png_bytes: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+        0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8,
+        0xCF, 0xC0, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00, 0x00, 0x00,
+        0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    std::fs::write(root.join("src/icon.png"), png_bytes).unwrap();
+
+    // WOFF2
+    std::fs::write(root.join("src/font.woff2"), b"wOF2fake-data").unwrap();
+
+    std::fs::write(
+        root.join("src/index.ts"),
+        "import icon from './icon.png';\nimport font from './font.woff2';\nexport const assets: string = icon + font;\n",
+    )
+    .unwrap();
+
+    let result = compile(CompileOptions {
+        package_root: root.to_path_buf(),
+        entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
+    })
+    .expect("Multiple asset types should compile");
+
+    let entry = &result.files[0];
+
+    assert!(
+        entry.content.contains("data:image/png;base64,"),
+        "Should contain PNG data URL, got:\n{}",
+        entry.content
+    );
+    assert!(
+        entry.content.contains("data:font/woff2;base64,"),
+        "Should contain WOFF2 data URL, got:\n{}",
+        entry.content
+    );
+}
+
+#[test]
+fn integration_asset_pkg() {
+    let package_root = fixtures_dir().join("asset-pkg");
+
+    let result = compile(CompileOptions {
+        package_root: package_root.clone(),
+        entries: vec![PathBuf::from("src/pageA.ts"), PathBuf::from("src/pageB.ts")],
+        source_maps: false,
+    })
+    .expect("asset-pkg should compile");
+
+    write_dist(&package_root, &result);
+
+    let file_names: Vec<&str> = result.files.iter().map(|f| f.name.as_str()).collect();
+    println!("Output files: {file_names:?}");
+
+    // logo.png is imported by both entries → should be in a shared chunk.
+    let chunk = result.files.iter().find(|f| f.name.starts_with("chunk-"));
+    assert!(
+        chunk.is_some(),
+        "Shared image should produce a shared chunk, files: {file_names:?}"
+    );
+
+    let chunk = chunk.unwrap();
+    assert!(
+        chunk.content.contains("data:image/png;base64,"),
+        "Shared chunk should contain PNG data URL"
+    );
+
+    // pageA imports both logo.png and brand.woff2.
+    let page_a = result.files.iter().find(|f| f.name == "pageA.js").unwrap();
+    assert!(
+        page_a.content.contains("data:font/woff2;base64,"),
+        "pageA should contain WOFF2 data URL (brand.woff2 is exclusive to pageA)"
+    );
+
+    // pageB imports only the shared logo.png — its code should reference the chunk.
+    let page_b = result.files.iter().find(|f| f.name == "pageB.js").unwrap();
+    assert!(
+        page_b.content.contains(&chunk.name),
+        "pageB should import the shared chunk, got:\n{}",
+        page_b.content
+    );
+
+    // No externals — all imports are internal assets.
+    assert!(
+        result.manifest.externals.is_empty(),
+        "No externals expected, got: {:?}",
+        result.manifest.externals
+    );
+
+    println!(
+        "--- asset-pkg dist written to {} ---",
+        package_root.join("dist").display()
+    );
+}
