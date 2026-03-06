@@ -177,7 +177,7 @@ fn test_multi_index_entry_naming() {
         entry_names
     );
     assert!(
-        !entry_names.iter().filter(|n| **n == "index.js").count() > 1,
+        entry_names.iter().filter(|n| **n == "index.js").count() <= 1,
         "Should not have duplicate index.js entries"
     );
 
@@ -297,8 +297,13 @@ export const b: string = 'b' + a;"#,
     // Both modules should be included in the output.
     let content = &output.files[0].content;
     assert!(
-        content.contains("a") && content.contains("b"),
-        "Should contain content from both modules, got: {}",
+        content.contains("const a ="),
+        "Should contain a.ts declaration, got: {}",
+        content
+    );
+    assert!(
+        content.contains("const b ="),
+        "Should contain b.ts declaration, got: {}",
         content
     );
 }
