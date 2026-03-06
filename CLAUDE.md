@@ -49,7 +49,7 @@ Two crates in a Rust workspace (edition 2024):
 
 ## Git Commits
 
-Use conventional commits (e.g., `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `chore:`, `docs:`). No AI attribution — do not add "Co-Authored-By" or any AI tool references.
+Use conventional commits (e.g., `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, `chore:`, `docs:`). Always single-line commit messages. No AI attribution — do not add "Co-Authored-By" or any AI tool references.
 
 ## Performance
 
