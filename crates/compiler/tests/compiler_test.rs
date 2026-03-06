@@ -82,10 +82,10 @@ fn test_multi_entry_with_shared_chunks() {
     );
 
     // utils.ts is imported by both entries → should become a shared chunk.
-    let chunk_file = result.files.iter().find(|f| f.name.contains("chunk"));
+    let chunk_file = result.files.iter().find(|f| f.name == "chunk-0-1.js");
     assert!(
         chunk_file.is_some(),
-        "Should produce a shared chunk for utils.ts, files: {:?}",
+        "Should produce chunk-0-1.js for utils.ts, files: {:?}",
         result.files.iter().map(|f| &f.name).collect::<Vec<_>>()
     );
 
@@ -121,7 +121,11 @@ fn test_export_reexports_are_traced() {
     })
     .expect("Compilation should succeed");
 
-    let entry = &result.files[0];
+    let entry = result
+        .files
+        .iter()
+        .find(|f| f.name.contains("index"))
+        .expect("Should have an index entry file");
 
     // export * from './utils' should pull in utils/index.ts content.
     assert!(
@@ -187,8 +191,8 @@ fn test_multi_index_entry_naming() {
 
     // Both entries share helper.ts, so there should be a shared chunk.
     assert!(
-        result.manifest.chunks.iter().any(|c| c.contains("chunk")),
-        "Should produce a shared chunk for helper.ts, got: {:?}",
+        result.manifest.chunks.iter().any(|c| c == "chunk-0-1.js"),
+        "Should produce chunk-0-1.js for helper.ts, got: {:?}",
         result.manifest.chunks
     );
 }
@@ -465,4 +469,148 @@ fn test_source_maps_disabled_by_default() {
             file.name
         );
     }
+}
+
+#[test]
+fn test_multiple_shared_chunks() {
+    // 3 entries where different pairs share different modules → separate chunks.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+
+    std::fs::write(
+        root.join("package.json"),
+        r#"{"name": "multi-chunk-pkg", "version": "1.0.0"}"#,
+    )
+    .unwrap();
+
+    std::fs::create_dir_all(root.join("src")).unwrap();
+
+    // shared_ab.ts — shared by entry A and B only.
+    std::fs::write(
+        root.join("src/shared_ab.ts"),
+        "export const sharedAB: string = 'ab';",
+    )
+    .unwrap();
+
+    // shared_bc.ts — shared by entry B and C only.
+    std::fs::write(
+        root.join("src/shared_bc.ts"),
+        "export const sharedBC: string = 'bc';",
+    )
+    .unwrap();
+
+    // shared_all.ts — shared by all three entries.
+    std::fs::write(
+        root.join("src/shared_all.ts"),
+        "export const sharedAll: string = 'all';",
+    )
+    .unwrap();
+
+    // Entry A imports shared_ab and shared_all.
+    std::fs::write(
+        root.join("src/entryA.ts"),
+        r#"import { sharedAB } from './shared_ab';
+import { sharedAll } from './shared_all';
+export const a: string = sharedAB + sharedAll;"#,
+    )
+    .unwrap();
+
+    // Entry B imports shared_ab, shared_bc, and shared_all.
+    std::fs::write(
+        root.join("src/entryB.ts"),
+        r#"import { sharedAB } from './shared_ab';
+import { sharedBC } from './shared_bc';
+import { sharedAll } from './shared_all';
+export const b: string = sharedAB + sharedBC + sharedAll;"#,
+    )
+    .unwrap();
+
+    // Entry C imports shared_bc and shared_all.
+    std::fs::write(
+        root.join("src/entryC.ts"),
+        r#"import { sharedBC } from './shared_bc';
+import { sharedAll } from './shared_all';
+export const c: string = sharedBC + sharedAll;"#,
+    )
+    .unwrap();
+
+    let result = compile(CompileOptions {
+        package_root: root.to_path_buf(),
+        entries: vec![
+            PathBuf::from("src/entryA.ts"),
+            PathBuf::from("src/entryB.ts"),
+            PathBuf::from("src/entryC.ts"),
+        ],
+        source_maps: false,
+    })
+    .expect("Compilation should succeed");
+
+    let chunk_names: Vec<&str> = result.manifest.chunks.iter().map(|s| s.as_str()).collect();
+
+    // Should have 3 separate shared chunks:
+    // chunk-0-1.js (shared by entries 0,1 = entryA, entryB) for shared_ab
+    // chunk-1-2.js (shared by entries 1,2 = entryB, entryC) for shared_bc
+    // chunk-0-1-2.js (shared by all three) for shared_all
+    assert!(
+        chunk_names.contains(&"chunk-0-1.js"),
+        "Should have chunk-0-1.js for shared_ab, got: {:?}",
+        chunk_names
+    );
+    assert!(
+        chunk_names.contains(&"chunk-1-2.js"),
+        "Should have chunk-1-2.js for shared_bc, got: {:?}",
+        chunk_names
+    );
+    assert!(
+        chunk_names.contains(&"chunk-0-1-2.js"),
+        "Should have chunk-0-1-2.js for shared_all, got: {:?}",
+        chunk_names
+    );
+
+    // Each entry should only import the chunks it belongs to.
+    let entry_a = result.files.iter().find(|f| f.name == "entryA.js").unwrap();
+    let entry_b = result.files.iter().find(|f| f.name == "entryB.js").unwrap();
+    let entry_c = result.files.iter().find(|f| f.name == "entryC.js").unwrap();
+
+    // Entry A should import chunk-0-1 and chunk-0-1-2, but NOT chunk-1-2.
+    assert!(
+        entry_a.content.contains("chunk-0-1.js"),
+        "Entry A should import chunk-0-1.js"
+    );
+    assert!(
+        entry_a.content.contains("chunk-0-1-2.js"),
+        "Entry A should import chunk-0-1-2.js"
+    );
+    assert!(
+        !entry_a.content.contains("chunk-1-2.js"),
+        "Entry A should NOT import chunk-1-2.js"
+    );
+
+    // Entry B should import all three chunks.
+    assert!(
+        entry_b.content.contains("chunk-0-1.js"),
+        "Entry B should import chunk-0-1.js"
+    );
+    assert!(
+        entry_b.content.contains("chunk-1-2.js"),
+        "Entry B should import chunk-1-2.js"
+    );
+    assert!(
+        entry_b.content.contains("chunk-0-1-2.js"),
+        "Entry B should import chunk-0-1-2.js"
+    );
+
+    // Entry C should import chunk-1-2 and chunk-0-1-2, but NOT chunk-0-1.
+    assert!(
+        entry_c.content.contains("chunk-1-2.js"),
+        "Entry C should import chunk-1-2.js"
+    );
+    assert!(
+        entry_c.content.contains("chunk-0-1-2.js"),
+        "Entry C should import chunk-0-1-2.js"
+    );
+    assert!(
+        !entry_c.content.contains("chunk-0-1.js"),
+        "Entry C should NOT import chunk-0-1.js"
+    );
 }

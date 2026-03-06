@@ -4,10 +4,17 @@ use std::path::{Path, PathBuf};
 use crate::compiler::OutputFile;
 use crate::graph::ModuleGraph;
 
+/// A shared chunk produced by the chunk planner.
+struct SharedChunk {
+    name: String,
+    entry_indices: Vec<usize>,
+    modules: Vec<PathBuf>,
+}
+
 /// Determines which modules go into which output files (entries vs shared chunks).
 struct ChunkPlan {
     entry_modules: HashMap<PathBuf, Vec<PathBuf>>,
-    shared_chunks: Vec<(String, Vec<PathBuf>)>,
+    shared_chunks: Vec<SharedChunk>,
 }
 
 /// Link a module graph into output files.
@@ -27,10 +34,10 @@ pub fn link(
     let mut outputs = Vec::with_capacity(plan.shared_chunks.len() + graph.entries.len());
 
     // Build shared chunks first.
-    for (chunk_name, module_paths) in &plan.shared_chunks {
+    for chunk in &plan.shared_chunks {
         let (mut output, raw_map) = build_output_file(
-            &format!("{chunk_name}.js"),
-            module_paths,
+            &format!("{}.js", chunk.name),
+            &chunk.modules,
             graph,
             source_maps,
         )?;
@@ -40,7 +47,7 @@ pub fn link(
 
     // Build entry files, deduplicating output names.
     let mut name_counts: HashMap<String, usize> = HashMap::new();
-    for entry_path in &graph.entries {
+    for (entry_idx, entry_path) in graph.entries.iter().enumerate() {
         let base_name = entry_name_from_path(entry_path, &canonical_root);
         let count = name_counts.entry(base_name.clone()).or_insert(0);
         let entry_name = if *count == 0 {
@@ -61,6 +68,7 @@ pub fn link(
             entry_path,
             exclusive,
             &plan.shared_chunks,
+            entry_idx,
             graph,
             source_maps,
         )?;
@@ -86,17 +94,23 @@ fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan, String> {
         }
     }
 
-    let mut shared_modules: Vec<PathBuf> = Vec::new();
     let mut entry_modules: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
-
     for entry in &graph.entries {
         entry_modules.insert(entry.clone(), Vec::new());
     }
 
+    // Group shared modules by their exact entry set.
+    let mut shared_groups: HashMap<Vec<usize>, Vec<PathBuf>> = HashMap::new();
+
     for (module_path, entries) in &module_entry_count {
         if entries.len() > 1 {
             if !entry_set.contains(module_path) {
-                shared_modules.push((*module_path).clone());
+                let mut key = entries.clone();
+                key.sort();
+                shared_groups
+                    .entry(key)
+                    .or_default()
+                    .push((*module_path).clone());
             }
         } else {
             let entry = &graph.entries[entries[0]];
@@ -109,12 +123,24 @@ fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan, String> {
         }
     }
 
-    let shared_chunks = if shared_modules.is_empty() {
-        vec![]
-    } else {
-        shared_modules.sort();
-        vec![("chunk-shared".to_string(), shared_modules)]
-    };
+    let mut shared_chunks: Vec<SharedChunk> = Vec::new();
+    for (entry_indices, mut modules) in shared_groups {
+        modules.sort();
+        let name = format!(
+            "chunk-{}",
+            entry_indices
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join("-")
+        );
+        shared_chunks.push(SharedChunk {
+            name,
+            entry_indices,
+            modules,
+        });
+    }
+    shared_chunks.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(ChunkPlan {
         entry_modules,
@@ -227,7 +253,8 @@ fn build_entry_file(
     output_name: &str,
     entry_path: &Path,
     exclusive_modules: &[PathBuf],
-    shared_chunks: &[(String, Vec<PathBuf>)],
+    shared_chunks: &[SharedChunk],
+    entry_idx: usize,
     graph: &ModuleGraph,
     source_maps: bool,
 ) -> Result<(OutputFile, Option<oxc_sourcemap::SourceMap>), String> {
@@ -237,11 +264,17 @@ fn build_entry_file(
     let (mut output_file, raw_map) =
         build_output_file(output_name, &all_paths, graph, source_maps)?;
 
-    // Prepend chunk imports without extra allocation via format!.
-    if !shared_chunks.is_empty() {
+    // Only import chunks that this entry belongs to.
+    let relevant_chunks: Vec<&str> = shared_chunks
+        .iter()
+        .filter(|c| c.entry_indices.contains(&entry_idx))
+        .map(|c| c.name.as_str())
+        .collect();
+
+    if !relevant_chunks.is_empty() {
         let mut with_chunks = String::new();
         let mut prepended_lines: u32 = 0;
-        for (chunk_name, _) in shared_chunks {
+        for chunk_name in &relevant_chunks {
             with_chunks.push_str("import \"./");
             with_chunks.push_str(chunk_name);
             with_chunks.push_str(".js\";\n");

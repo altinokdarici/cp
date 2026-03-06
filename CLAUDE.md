@@ -53,7 +53,7 @@ Use conventional commits (e.g., `feat:`, `fix:`, `refactor:`, `perf:`, `test:`, 
 
 ## Pull Requests
 
-Each PR should fix a single issue or add a single feature. Do not bundle unrelated changes into one PR. This keeps reviews focused, bisection easy, and reverts safe.
+Each PR should fix a single issue or add a single feature. Do not bundle unrelated changes into one PR. This keeps reviews focused, bisection easy, and reverts safe. Do not mention Claude Code or any AI tool in PR descriptions.
 
 ## Performance
 
