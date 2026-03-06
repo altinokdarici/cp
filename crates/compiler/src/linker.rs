@@ -14,7 +14,11 @@ struct ChunkPlan {
 ///
 /// All modules are already transformed to JS in the graph phase.
 /// The linker only needs to: compute chunks, strip imports, concatenate, emit.
-pub fn link(graph: &ModuleGraph, package_root: &Path) -> Result<Vec<OutputFile>, String> {
+pub fn link(
+    graph: &ModuleGraph,
+    package_root: &Path,
+    source_maps: bool,
+) -> Result<Vec<OutputFile>, String> {
     let canonical_root = package_root
         .canonicalize()
         .unwrap_or(package_root.to_path_buf());
@@ -24,7 +28,13 @@ pub fn link(graph: &ModuleGraph, package_root: &Path) -> Result<Vec<OutputFile>,
 
     // Build shared chunks first.
     for (chunk_name, module_paths) in &plan.shared_chunks {
-        let output = build_output_file(&format!("{chunk_name}.js"), module_paths, graph)?;
+        let (mut output, raw_map) = build_output_file(
+            &format!("{chunk_name}.js"),
+            module_paths,
+            graph,
+            source_maps,
+        )?;
+        finalize_source_map(&mut output, raw_map);
         outputs.push(output);
     }
 
@@ -46,13 +56,15 @@ pub fn link(graph: &ModuleGraph, package_root: &Path) -> Result<Vec<OutputFile>,
             .map(|v| v.as_slice())
             .unwrap_or(&[]);
 
-        let output = build_entry_file(
+        let (mut output, raw_map) = build_entry_file(
             &format!("{entry_name}.js"),
             entry_path,
             exclusive,
             &plan.shared_chunks,
             graph,
+            source_maps,
         )?;
+        finalize_source_map(&mut output, raw_map);
         outputs.push(output);
     }
 
@@ -129,7 +141,8 @@ fn build_output_file(
     output_name: &str,
     module_paths: &[PathBuf],
     graph: &ModuleGraph,
-) -> Result<OutputFile, String> {
+    source_maps: bool,
+) -> Result<(OutputFile, Option<oxc_sourcemap::SourceMap>), String> {
     // Dedup external imports using HashSet (O(1) lookup instead of Vec::contains).
     let mut seen_imports: HashSet<&str> = HashSet::new();
     let mut all_external_imports: Vec<&str> = Vec::new();
@@ -173,11 +186,41 @@ fn build_output_file(
         output.push('\n');
     }
 
-    Ok(OutputFile {
-        name: output_name.to_string(),
-        content: output,
-        source_map: None,
-    })
+    // Build combined source map from per-module maps.
+    let combined_map = if source_maps {
+        let mut line_offset: u32 = all_external_imports.len() as u32;
+        if !all_external_imports.is_empty() {
+            line_offset += 1; // blank separator line
+        }
+
+        let mut pairs: Vec<(&oxc_sourcemap::SourceMap, u32)> = Vec::new();
+
+        for (i, module_path) in module_paths.iter().enumerate() {
+            let module = graph.modules.get(module_path).unwrap();
+            if let Some(ref sm) = module.source_map {
+                pairs.push((sm, line_offset));
+            }
+            let lines_in_body = module_sources[i].bytes().filter(|b| *b == b'\n').count() as u32;
+            line_offset += lines_in_body + 1; // +1 for the \n we append
+        }
+
+        if !pairs.is_empty() {
+            Some(oxc_sourcemap::ConcatSourceMapBuilder::from_sourcemaps(&pairs).into_sourcemap())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Ok((
+        OutputFile {
+            name: output_name.to_string(),
+            content: output,
+            source_map: None,
+        },
+        combined_map,
+    ))
 }
 
 fn build_entry_file(
@@ -186,26 +229,51 @@ fn build_entry_file(
     exclusive_modules: &[PathBuf],
     shared_chunks: &[(String, Vec<PathBuf>)],
     graph: &ModuleGraph,
-) -> Result<OutputFile, String> {
+    source_maps: bool,
+) -> Result<(OutputFile, Option<oxc_sourcemap::SourceMap>), String> {
     let mut all_paths: Vec<PathBuf> = exclusive_modules.to_vec();
     all_paths.push(entry_path.to_path_buf());
 
-    let mut output_file = build_output_file(output_name, &all_paths, graph)?;
+    let (mut output_file, raw_map) =
+        build_output_file(output_name, &all_paths, graph, source_maps)?;
 
     // Prepend chunk imports without extra allocation via format!.
     if !shared_chunks.is_empty() {
         let mut with_chunks = String::new();
+        let mut prepended_lines: u32 = 0;
         for (chunk_name, _) in shared_chunks {
             with_chunks.push_str("import \"./");
             with_chunks.push_str(chunk_name);
             with_chunks.push_str(".js\";\n");
+            prepended_lines += 1;
         }
         with_chunks.push('\n');
+        prepended_lines += 1; // blank separator
         with_chunks.push_str(&output_file.content);
         output_file.content = with_chunks;
+
+        // Adjust source map offset for prepended chunk import lines.
+        if let Some(map) = raw_map {
+            let adjusted =
+                oxc_sourcemap::ConcatSourceMapBuilder::from_sourcemaps(&[(&map, prepended_lines)])
+                    .into_sourcemap();
+            return Ok((output_file, Some(adjusted)));
+        }
+
+        return Ok((output_file, None));
     }
 
-    Ok(output_file)
+    Ok((output_file, raw_map))
+}
+
+/// Convert a raw SourceMap to JSON string and append sourceMappingURL comment.
+fn finalize_source_map(output: &mut OutputFile, raw_map: Option<oxc_sourcemap::SourceMap>) {
+    if let Some(map) = raw_map {
+        output.source_map = Some(map.to_json_string());
+        output
+            .content
+            .push_str(&format!("//# sourceMappingURL={}.map\n", output.name));
+    }
 }
 
 fn entry_name_from_path(entry_path: &Path, canonical_root: &Path) -> String {

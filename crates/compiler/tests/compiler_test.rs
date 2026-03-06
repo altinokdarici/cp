@@ -13,6 +13,7 @@ fn test_single_entry_simple_package() {
     let result = compile(CompileOptions {
         package_root: package_root.clone(),
         entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
     })
     .expect("Compilation should succeed");
 
@@ -69,6 +70,7 @@ fn test_multi_entry_with_shared_chunks() {
             PathBuf::from("src/index.ts"),
             PathBuf::from("src/Button.ts"),
         ],
+        source_maps: false,
     })
     .expect("Compilation should succeed");
 
@@ -115,6 +117,7 @@ fn test_export_reexports_are_traced() {
     let result = compile(CompileOptions {
         package_root,
         entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
     })
     .expect("Compilation should succeed");
 
@@ -160,6 +163,7 @@ fn test_multi_index_entry_naming() {
             PathBuf::from("src/appChrome/index.ts"),
             PathBuf::from("src/header/index.ts"),
         ],
+        source_maps: false,
     })
     .expect("Compilation should succeed");
 
@@ -223,6 +227,7 @@ fn test_entry_name_dedup_on_collision() {
             PathBuf::from("src/feature/index.ts"),
             PathBuf::from("src/v2/feature/index.ts"),
         ],
+        source_maps: false,
     })
     .expect("Compilation should succeed");
 
@@ -285,6 +290,7 @@ export const b: string = 'b' + a;"#,
     let result = compile(CompileOptions {
         package_root: root.to_path_buf(),
         entries: vec![PathBuf::from("src/a.ts")],
+        source_maps: false,
     });
 
     assert!(
@@ -353,6 +359,7 @@ export const result: string = foo + bar;
     let result = compile(CompileOptions {
         package_root: root.to_path_buf(),
         entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
     })
     .expect("Compilation should succeed");
 
@@ -397,4 +404,65 @@ export const result: string = foo + bar;
         "Should detect 'react' as external, got: {:?}",
         result.manifest.externals
     );
+}
+
+#[test]
+fn test_source_maps_generated() {
+    let package_root = fixtures_dir().join("simple-pkg");
+
+    let result = compile(CompileOptions {
+        package_root,
+        entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: true,
+    })
+    .expect("Compilation should succeed");
+
+    // At least one output file should have a source map.
+    let entry = &result.files[0];
+    assert!(
+        entry.source_map.is_some(),
+        "Entry file should have a source map when source_maps is enabled"
+    );
+
+    // Source map should be valid JSON with a "sources" array.
+    let map_json: serde_json::Value = serde_json::from_str(entry.source_map.as_ref().unwrap())
+        .expect("Source map should be valid JSON");
+    assert!(
+        map_json.get("sources").is_some(),
+        "Source map should have a 'sources' field, got: {}",
+        map_json
+    );
+    assert!(map_json["sources"].is_array(), "sources should be an array");
+
+    // Content should have a sourceMappingURL comment.
+    assert!(
+        entry.content.contains("//# sourceMappingURL="),
+        "Output should contain sourceMappingURL comment, got:\n{}",
+        entry.content
+    );
+}
+
+#[test]
+fn test_source_maps_disabled_by_default() {
+    let package_root = fixtures_dir().join("simple-pkg");
+
+    let result = compile(CompileOptions {
+        package_root,
+        entries: vec![PathBuf::from("src/index.ts")],
+        source_maps: false,
+    })
+    .expect("Compilation should succeed");
+
+    for file in &result.files {
+        assert!(
+            file.source_map.is_none(),
+            "File {} should not have a source map when source_maps is false",
+            file.name
+        );
+        assert!(
+            !file.content.contains("//# sourceMappingURL="),
+            "File {} should not contain sourceMappingURL when source_maps is false",
+            file.name
+        );
+    }
 }
