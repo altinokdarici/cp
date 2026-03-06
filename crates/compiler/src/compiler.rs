@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::graph;
 use crate::linker;
+use crate::loader;
 
 /// Options for compiling a package.
 pub struct CompileOptions {
@@ -54,8 +55,13 @@ pub struct CompileOutput {
 /// 3. Return the output files + manifest.
 pub fn compile(options: CompileOptions) -> Result<CompileOutput, String> {
     // Step 1: Build module graph.
-    let module_graph =
-        graph::build_module_graph(&options.entries, &options.package_root, options.source_maps)?;
+    let registry = loader::default_registry();
+    let module_graph = graph::build_module_graph(
+        &options.entries,
+        &options.package_root,
+        options.source_maps,
+        &registry,
+    )?;
 
     // Collect all external imports across the graph (HashSet for O(1) dedup).
     let mut externals_set: HashSet<String> = HashSet::new();

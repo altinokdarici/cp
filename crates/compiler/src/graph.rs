@@ -1,9 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration, Program, Statement,
+    ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration, ImportDeclarationSpecifier,
+    Program, Statement,
 };
 use oxc_ast_visit::Visit;
 use oxc_codegen::{Codegen, CodegenOptions};
@@ -14,7 +15,25 @@ use oxc_span::SourceType;
 use oxc_transformer::{TransformOptions, Transformer};
 use rayon::prelude::*;
 
-use crate::loader;
+use crate::loader::{LoadResult, LoaderRegistry};
+
+/// Binding information for CSS module imports in a consuming module.
+#[derive(Debug)]
+pub struct CssModuleBinding {
+    pub css_module_path: PathBuf,
+    pub kind: CssModuleBindingKind,
+}
+
+/// The kind of import binding used for a CSS module.
+#[derive(Debug)]
+pub enum CssModuleBindingKind {
+    /// `import styles from './button.module.css'`
+    Default(String),
+    /// `import * as styles from './button.module.css'`
+    Namespace(String),
+    /// `import { button as btn, header } from './button.module.css'`
+    Named(Vec<(String, String)>),
+}
 
 /// A module in the package's internal dependency graph.
 #[derive(Debug)]
@@ -27,6 +46,10 @@ pub struct Module {
     pub js_source: String,
     /// Per-module source map (present when source_maps is enabled and codegen ran).
     pub source_map: Option<oxc_sourcemap::SourceMap>,
+    /// CSS module scoped class name exports (only for *.module.css files).
+    pub css_module_exports: Option<BTreeMap<String, String>>,
+    /// CSS module bindings this module imports (binding injected by linker).
+    pub css_module_bindings: Vec<CssModuleBinding>,
 }
 
 /// The complete internal module graph for a package.
@@ -42,19 +65,22 @@ pub struct ModuleGraph {
 struct DiscoveredModule {
     source: String,
     needs_transform: bool,
+    needs_loader_transform: bool,
     internal_imports: Vec<PathBuf>,
     external_imports: Vec<String>,
     source_map: Option<oxc_sourcemap::SourceMap>,
+    css_module_bindings: Vec<CssModuleBinding>,
 }
 
 /// Build the module graph starting from the given entry file paths.
 ///
 /// Phase 1 (sequential): Read files, parse for import extraction, resolve dependencies.
-/// Phase 2 (parallel): Transform TS/JSX and codegen across all CPU cores via rayon.
+/// Phase 2 (parallel): Transform TS/JSX and loader transforms across all CPU cores via rayon.
 pub fn build_module_graph(
     entries: &[PathBuf],
     package_root: &Path,
     source_maps: bool,
+    registry: &LoaderRegistry,
 ) -> Result<ModuleGraph, String> {
     let canonical_root = package_root.canonicalize().map_err(|e| {
         format!(
@@ -72,6 +98,7 @@ pub fn build_module_graph(
             ".jsx".into(),
             ".mjs".into(),
             ".json".into(),
+            ".css".into(),
         ],
         main_fields: vec!["module".into(), "main".into()],
         condition_names: vec!["import".into(), "default".into()],
@@ -98,24 +125,27 @@ pub fn build_module_graph(
             &mut discovered,
             &mut visiting,
             source_maps,
+            registry,
         )?;
         resolved_entries.push(resolved);
     }
 
-    // Phase 2: Transform + codegen (only for modules needing TS/JSX transform).
-    // Non-transform modules were already stripped+codegen'd in Phase 1.
-    let transform_count = discovered.values().filter(|d| d.needs_transform).count();
+    // Phase 2: Transform + codegen (for modules needing TS/JSX or loader transform).
+    let transform_count = discovered
+        .values()
+        .filter(|d| d.needs_transform || d.needs_loader_transform)
+        .count();
     let modules: HashMap<PathBuf, Module> = if transform_count >= 32 {
         // Parallel path: rayon distributes transform+codegen across CPU cores.
         discovered
             .into_par_iter()
-            .map(|(key, disc)| finish_module(key, disc, source_maps))
+            .map(|(key, disc)| finish_module(key, disc, source_maps, registry))
             .collect::<Result<_, String>>()?
     } else {
         // Sequential path: avoids rayon overhead for small graphs.
         discovered
             .into_iter()
-            .map(|(key, disc)| finish_module(key, disc, source_maps))
+            .map(|(key, disc)| finish_module(key, disc, source_maps, registry))
             .collect::<Result<_, String>>()?
     };
 
@@ -155,6 +185,7 @@ fn discover_module(
     discovered: &mut HashMap<PathBuf, DiscoveredModule>,
     visiting: &mut HashSet<PathBuf>,
     source_maps: bool,
+    registry: &LoaderRegistry,
 ) -> Result<(), String> {
     // All callers provide canonical paths (resolve_entry canonicalizes, oxc_resolver
     // returns canonical paths), so skip the redundant canonicalize() syscall.
@@ -167,13 +198,37 @@ fn discover_module(
     let raw_content = std::fs::read_to_string(abs_path)
         .map_err(|e| format!("Failed to read {}: {e}", abs_path.display()))?;
 
-    let load_result = loader::load(abs_path, raw_content)?;
+    let loader = registry.loader_for(abs_path).ok_or_else(|| {
+        let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        format!("Unsupported file type: .{ext}")
+    })?;
+
+    let load_result = loader.load(abs_path, raw_content)?;
+
+    // Modules needing loader transform (e.g., CSS modules) store raw content — skip JS parsing.
+    // They have no JS imports to extract.
+    if load_result.needs_loader_transform {
+        let owned_path = visiting.take(abs_path).unwrap();
+        discovered.insert(
+            owned_path,
+            DiscoveredModule {
+                source: load_result.js_source,
+                needs_transform: false,
+                needs_loader_transform: true,
+                internal_imports: Vec::new(),
+                external_imports: Vec::new(),
+                source_map: None,
+                css_module_bindings: Vec::new(),
+            },
+        );
+        return Ok(());
+    }
 
     // Parse for import extraction. For non-transform modules, we also strip imports
     // and codegen here to avoid a redundant re-parse in Phase 2.
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(abs_path).unwrap_or_default();
-    let mut parsed = Parser::new(&allocator, &load_result.source, source_type).parse();
+    let mut parsed = Parser::new(&allocator, &load_result.js_source, source_type).parse();
 
     if parsed.panicked {
         return Err(format!("Parse error in {}", abs_path.display()));
@@ -184,22 +239,33 @@ fn discover_module(
 
     let mut internal_imports = Vec::new();
     let mut external_imports = Vec::new();
+    let mut css_module_bindings = Vec::new();
     let module_dir = abs_path.parent().unwrap();
 
-    for specifier in &collector.specifiers {
-        if is_relative_import(specifier) {
-            let resolved = resolver.resolve(module_dir, specifier).map_err(|e| {
-                format!(
-                    "Failed to resolve '{}' from {}: {e}",
-                    specifier,
-                    abs_path.display()
-                )
-            })?;
+    for import in &collector.imports {
+        if is_relative_import(&import.specifier) {
+            let resolved = resolver
+                .resolve(module_dir, &import.specifier)
+                .map_err(|e| {
+                    format!(
+                        "Failed to resolve '{}' from {}: {e}",
+                        import.specifier,
+                        abs_path.display()
+                    )
+                })?;
 
             let resolved_path = resolved.into_path_buf();
 
             if resolved_path.starts_with(canonical_root) {
                 internal_imports.push(resolved_path.clone());
+
+                // Track CSS module bindings for the linker.
+                if is_css_module_path(&resolved_path)
+                    && let Some(binding) = build_css_module_binding(&resolved_path, import)
+                {
+                    css_module_bindings.push(binding);
+                }
+
                 discover_module(
                     resolver,
                     &resolved_path,
@@ -207,12 +273,13 @@ fn discover_module(
                     discovered,
                     visiting,
                     source_maps,
+                    registry,
                 )?;
             } else {
-                external_imports.push(specifier.to_string());
+                external_imports.push(import.specifier.clone());
             }
         } else {
-            external_imports.push(specifier.to_string());
+            external_imports.push(import.specifier.clone());
         }
     }
 
@@ -230,7 +297,7 @@ fn discover_module(
             };
             let result = Codegen::new()
                 .with_options(options)
-                .with_source_text(&load_result.source)
+                .with_source_text(&load_result.js_source)
                 .build(&parsed.program);
             (result.code, result.map)
         } else {
@@ -239,7 +306,7 @@ fn discover_module(
     } else {
         // Transform modules keep raw source for Phase 2.
         // Modules with no imports need no stripping — use raw source directly.
-        (load_result.source, None)
+        (load_result.js_source, None)
     };
 
     // Recover the owned PathBuf from `visiting` to reuse for `discovered` (avoids extra clone).
@@ -249,9 +316,11 @@ fn discover_module(
         DiscoveredModule {
             source,
             needs_transform: load_result.needs_transform,
+            needs_loader_transform: false,
             internal_imports,
             external_imports,
             source_map,
+            css_module_bindings,
         },
     );
 
@@ -261,15 +330,30 @@ fn discover_module(
 /// Convert a discovered module into its final form.
 /// Non-transform modules already have their final source from Phase 1.
 /// Transform modules go through parse → transform → strip → codegen here.
+/// Loader-transform modules call the loader's transform() method.
 fn finish_module(
     key: PathBuf,
     disc: DiscoveredModule,
     source_maps: bool,
+    registry: &LoaderRegistry,
 ) -> Result<(PathBuf, Module), String> {
-    let (js_source, source_map) = if disc.needs_transform {
-        transform_and_codegen(&key, &disc.source, source_maps)?
+    let (js_source, source_map, css_module_exports) = if disc.needs_transform {
+        let (src, map) = transform_and_codegen(&key, &disc.source, source_maps)?;
+        (src, map, None)
+    } else if disc.needs_loader_transform {
+        let loader = registry
+            .loader_for(&key)
+            .ok_or_else(|| format!("No loader for {}", key.display()))?;
+        let mut result = LoadResult {
+            js_source: disc.source,
+            needs_transform: false,
+            needs_loader_transform: true,
+            css_module_exports: None,
+        };
+        loader.transform(&key, &mut result)?;
+        (result.js_source, None, result.css_module_exports)
     } else {
-        (disc.source, disc.source_map)
+        (disc.source, disc.source_map, None)
     };
     Ok((
         key,
@@ -278,6 +362,8 @@ fn finish_module(
             external_imports: disc.external_imports,
             js_source,
             source_map,
+            css_module_exports,
+            css_module_bindings: disc.css_module_bindings,
         },
     ))
 }
@@ -353,24 +439,100 @@ fn is_relative_import(specifier: &str) -> bool {
     specifier.starts_with("./") || specifier.starts_with("../")
 }
 
-/// Collects import specifiers from the AST.
+fn is_css_module_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.ends_with(".module.css"))
+}
+
+fn build_css_module_binding(
+    resolved_path: &Path,
+    import: &CollectedImport,
+) -> Option<CssModuleBinding> {
+    let kind = if let Some(ref name) = import.default_binding {
+        CssModuleBindingKind::Default(name.clone())
+    } else if let Some(ref name) = import.namespace_binding {
+        CssModuleBindingKind::Namespace(name.clone())
+    } else if !import.named_bindings.is_empty() {
+        CssModuleBindingKind::Named(import.named_bindings.clone())
+    } else {
+        // Side-effect import (import './button.module.css') — no binding needed.
+        return None;
+    };
+
+    Some(CssModuleBinding {
+        css_module_path: resolved_path.to_path_buf(),
+        kind,
+    })
+}
+
+/// A collected import with binding information.
+struct CollectedImport {
+    specifier: String,
+    default_binding: Option<String>,
+    namespace_binding: Option<String>,
+    named_bindings: Vec<(String, String)>, // (imported, local)
+}
+
+/// Collects import specifiers and binding info from the AST.
 #[derive(Default)]
 struct ImportCollector {
-    pub specifiers: Vec<String>,
+    pub imports: Vec<CollectedImport>,
 }
 
 impl<'a> Visit<'a> for ImportCollector {
     fn visit_import_declaration(&mut self, decl: &ImportDeclaration<'a>) {
-        self.specifiers.push(decl.source.value.to_string());
+        let specifier = decl.source.value.to_string();
+
+        // Only collect binding info for potential CSS module imports to avoid
+        // thousands of throwaway String allocations for regular JS/TS imports.
+        let is_possible_css_module = specifier.ends_with(".module.css");
+
+        let mut import = CollectedImport {
+            specifier,
+            default_binding: None,
+            namespace_binding: None,
+            named_bindings: Vec::new(),
+        };
+
+        if is_possible_css_module && let Some(specifiers) = &decl.specifiers {
+            for spec in specifiers {
+                match spec {
+                    ImportDeclarationSpecifier::ImportDefaultSpecifier(s) => {
+                        import.default_binding = Some(s.local.name.to_string());
+                    }
+                    ImportDeclarationSpecifier::ImportNamespaceSpecifier(s) => {
+                        import.namespace_binding = Some(s.local.name.to_string());
+                    }
+                    ImportDeclarationSpecifier::ImportSpecifier(s) => {
+                        let imported = s.imported.name().to_string();
+                        let local = s.local.name.to_string();
+                        import.named_bindings.push((imported, local));
+                    }
+                }
+            }
+        }
+
+        self.imports.push(import);
     }
 
     fn visit_export_all_declaration(&mut self, decl: &ExportAllDeclaration<'a>) {
-        self.specifiers.push(decl.source.value.to_string());
+        self.imports.push(CollectedImport {
+            specifier: decl.source.value.to_string(),
+            default_binding: None,
+            namespace_binding: None,
+            named_bindings: Vec::new(),
+        });
     }
 
     fn visit_export_named_declaration(&mut self, decl: &ExportNamedDeclaration<'a>) {
         if let Some(source) = &decl.source {
-            self.specifiers.push(source.value.to_string());
+            self.imports.push(CollectedImport {
+                specifier: source.value.to_string(),
+                default_binding: None,
+                namespace_binding: None,
+                named_bindings: Vec::new(),
+            });
         }
     }
 }
