@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772839614350,
+  "lastUpdate": 1772840666490,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -389,6 +389,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 16768860,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d74367732085b20134cf5bf16ed0d805eddd558",
+          "message": "feat: inline binary assets as base64 data URLs (#10)",
+          "timestamp": "2026-03-06T15:43:50-08:00",
+          "tree_id": "22cce6c25371326974d61bcd7d3b8c07cc0b84ec",
+          "url": "https://github.com/altinokdarici/cp/commit/7d74367732085b20134cf5bf16ed0d805eddd558"
+        },
+        "date": 1772840665711,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 955091,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3520151,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16593484,
             "unit": "ns/iter"
           }
         ]
