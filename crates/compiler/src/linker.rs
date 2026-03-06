@@ -28,9 +28,18 @@ pub fn link(graph: &ModuleGraph, package_root: &Path) -> Result<Vec<OutputFile>,
         outputs.push(output);
     }
 
-    // Build entry files.
+    // Build entry files, deduplicating output names.
+    let mut name_counts: HashMap<String, usize> = HashMap::new();
     for entry_path in &graph.entries {
-        let entry_name = entry_name_from_path(entry_path, &canonical_root);
+        let base_name = entry_name_from_path(entry_path, &canonical_root);
+        let count = name_counts.entry(base_name.clone()).or_insert(0);
+        let entry_name = if *count == 0 {
+            base_name.clone()
+        } else {
+            format!("{base_name}-{count}")
+        };
+        *count += 1;
+
         let exclusive = plan
             .entry_modules
             .get(entry_path)
@@ -199,7 +208,7 @@ fn build_entry_file(
     Ok(output_file)
 }
 
-/// Strip import declarations from JS source. Single-pass, no intermediate Vec.
+/// Strip import declarations and internal re-export-from lines from JS source.
 fn strip_imports(source: &str) -> String {
     let mut output = String::with_capacity(source.len());
     for line in source.lines() {
@@ -207,7 +216,11 @@ fn strip_imports(source: &str) -> String {
         let is_import = (trimmed.starts_with("import ") && trimmed.contains(" from "))
             || trimmed.starts_with("import \"")
             || trimmed.starts_with("import '");
-        if !is_import {
+        // Strip `export * from './...'` and `export { x } from './...'` for internal modules.
+        let is_internal_reexport = trimmed.starts_with("export ")
+            && trimmed.contains(" from ")
+            && (trimmed.contains("from \"./") || trimmed.contains("from '../"));
+        if !is_import && !is_internal_reexport {
             output.push_str(line);
             output.push('\n');
         }
@@ -220,11 +233,22 @@ fn entry_name_from_path(entry_path: &Path, canonical_root: &Path) -> String {
         .strip_prefix(canonical_root)
         .unwrap_or(entry_path);
 
-    relative
+    let stem = relative
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("index")
-        .to_string()
+        .unwrap_or("index");
+
+    // If the file stem is "index", use the parent directory name to disambiguate.
+    // e.g., src/appChrome/index.ts -> appChrome
+    if stem == "index"
+        && let Some(parent) = relative.parent().and_then(|p| p.file_name())
+        && let Some(name) = parent.to_str()
+        && name != "src"
+    {
+        return name.to_string();
+    }
+
+    stem.to_string()
 }
 
 /// Write a safe identifier directly to output, avoiding a String allocation.
