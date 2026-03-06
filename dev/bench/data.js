@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772835708197,
+  "lastUpdate": 1772839614350,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -350,6 +350,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 16294168,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c111485e3d7221826dcb23c1143cbd2ba83186f4",
+          "message": "feat: trait-based loader API with CSS runtime injection and CSS modules (#9)\n\nIntroduce a Loader trait and LoaderRegistry for extensible file handling.\nConvert the monolithic loader function into six concrete loaders (JS, JSON, CSS,\nCSS Module, GraphQL, Text) each in their own file. Plain CSS imports inject a\n<style> tag at runtime. CSS module imports (*.module.css) use lightningcss to\nscope class names, inject scoped styles at runtime, and expose class-name\nbindings via const declarations injected by the linker. Includes 7 new unit\ntests and 2 integration test fixtures.",
+          "timestamp": "2026-03-06T15:25:38-08:00",
+          "tree_id": "fc6c2a640cba99a3856e1a385c1f62d945d23673",
+          "url": "https://github.com/altinokdarici/cp/commit/c111485e3d7221826dcb23c1143cbd2ba83186f4"
+        },
+        "date": 1772839613949,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 842095,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3466427,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16768860,
             "unit": "ns/iter"
           }
         ]
