@@ -17,10 +17,6 @@ use crate::loader;
 /// A module in the package's internal dependency graph.
 #[derive(Debug)]
 pub struct Module {
-    /// Absolute path to the source file.
-    pub path: PathBuf,
-    /// Whether this file needs TS/JSX transformation.
-    pub needs_transform: bool,
     /// Imports that resolve to files within this package (absolute paths).
     pub internal_imports: Vec<PathBuf>,
     /// Imports that resolve outside this package (bare specifiers, kept as-is).
@@ -240,8 +236,6 @@ fn finish_module(key: PathBuf, disc: DiscoveredModule) -> Result<(PathBuf, Modul
     Ok((
         key,
         Module {
-            path: disc.path,
-            needs_transform: disc.needs_transform,
             internal_imports: disc.internal_imports,
             external_imports: disc.external_imports,
             js_source,
