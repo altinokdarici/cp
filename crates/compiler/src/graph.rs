@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
-use oxc_ast::ast::ImportDeclaration;
+use oxc_ast::ast::{ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration};
 use oxc_ast_visit::Visit;
 use oxc_codegen::Codegen;
 use oxc_parser::Parser;
@@ -283,5 +283,15 @@ struct ImportCollector {
 impl<'a> Visit<'a> for ImportCollector {
     fn visit_import_declaration(&mut self, decl: &ImportDeclaration<'a>) {
         self.specifiers.push(decl.source.value.to_string());
+    }
+
+    fn visit_export_all_declaration(&mut self, decl: &ExportAllDeclaration<'a>) {
+        self.specifiers.push(decl.source.value.to_string());
+    }
+
+    fn visit_export_named_declaration(&mut self, decl: &ExportNamedDeclaration<'a>) {
+        if let Some(source) = &decl.source {
+            self.specifiers.push(source.value.to_string());
+        }
     }
 }
