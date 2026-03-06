@@ -5,16 +5,16 @@ use crate::compiler::OutputFile;
 use crate::graph::ModuleGraph;
 
 /// A shared chunk produced by the chunk planner.
-struct SharedChunk {
+struct SharedChunk<'a> {
     name: String,
     entry_indices: Vec<usize>,
-    modules: Vec<PathBuf>,
+    modules: Vec<&'a Path>,
 }
 
 /// Determines which modules go into which output files (entries vs shared chunks).
-struct ChunkPlan {
-    entry_modules: HashMap<PathBuf, Vec<PathBuf>>,
-    shared_chunks: Vec<SharedChunk>,
+struct ChunkPlan<'a> {
+    entry_modules: HashMap<&'a Path, Vec<&'a Path>>,
+    shared_chunks: Vec<SharedChunk<'a>>,
 }
 
 /// Link a module graph into output files.
@@ -59,7 +59,7 @@ pub fn link(
 
         let exclusive = plan
             .entry_modules
-            .get(entry_path)
+            .get(entry_path.as_path())
             .map(|v| v.as_slice())
             .unwrap_or(&[]);
 
@@ -79,12 +79,12 @@ pub fn link(
     Ok(outputs)
 }
 
-fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan, String> {
-    let entry_set: HashSet<&PathBuf> = graph.entries.iter().collect();
-    let mut module_entry_count: HashMap<&PathBuf, Vec<usize>> = HashMap::new();
+fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan<'_>, String> {
+    let entry_set: HashSet<&Path> = graph.entries.iter().map(PathBuf::as_path).collect();
+    let mut module_entry_count: HashMap<&Path, Vec<usize>> = HashMap::new();
 
     for (entry_idx, entry) in graph.entries.iter().enumerate() {
-        let mut visited = HashSet::with_capacity(graph.modules.len());
+        let mut visited: HashSet<&Path> = HashSet::with_capacity(graph.modules.len());
         collect_reachable(entry, graph, &mut visited);
         for module_path in visited {
             module_entry_count
@@ -94,36 +94,30 @@ fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan, String> {
         }
     }
 
-    let mut entry_modules: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    let mut entry_modules: HashMap<&Path, Vec<&Path>> = HashMap::new();
     for entry in &graph.entries {
-        entry_modules.insert(entry.clone(), Vec::new());
+        entry_modules.insert(entry, Vec::new());
     }
 
     // Group shared modules by their exact entry set.
-    let mut shared_groups: HashMap<Vec<usize>, Vec<PathBuf>> = HashMap::new();
+    let mut shared_groups: HashMap<Vec<usize>, Vec<&Path>> = HashMap::new();
 
     for (module_path, entries) in &module_entry_count {
         if entries.len() > 1 {
-            if !entry_set.contains(module_path) {
+            if !entry_set.contains(*module_path) {
                 let mut key = entries.clone();
                 key.sort();
-                shared_groups
-                    .entry(key)
-                    .or_default()
-                    .push((*module_path).clone());
+                shared_groups.entry(key).or_default().push(*module_path);
             }
         } else {
-            let entry = &graph.entries[entries[0]];
+            let entry = graph.entries[entries[0]].as_path();
             if *module_path != entry {
-                entry_modules
-                    .entry(entry.clone())
-                    .or_default()
-                    .push((*module_path).clone());
+                entry_modules.entry(entry).or_default().push(*module_path);
             }
         }
     }
 
-    let mut shared_chunks: Vec<SharedChunk> = Vec::new();
+    let mut shared_chunks: Vec<SharedChunk<'_>> = Vec::new();
     for (entry_indices, mut modules) in shared_groups {
         modules.sort();
         let name = format!(
@@ -149,9 +143,9 @@ fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan, String> {
 }
 
 fn collect_reachable<'a>(
-    module_path: &'a PathBuf,
+    module_path: &'a Path,
     graph: &'a ModuleGraph,
-    visited: &mut HashSet<&'a PathBuf>,
+    visited: &mut HashSet<&'a Path>,
 ) {
     if !visited.insert(module_path) {
         return;
@@ -165,7 +159,7 @@ fn collect_reachable<'a>(
 
 fn build_output_file(
     output_name: &str,
-    module_paths: &[PathBuf],
+    module_paths: &[&Path],
     graph: &ModuleGraph,
     source_maps: bool,
 ) -> Result<(OutputFile, Option<oxc_sourcemap::SourceMap>), String> {
@@ -177,7 +171,7 @@ fn build_output_file(
     for module_path in module_paths {
         let module = graph
             .modules
-            .get(module_path)
+            .get(*module_path)
             .ok_or_else(|| format!("Module not found: {}", module_path.display()))?;
 
         for ext in &module.external_imports {
@@ -222,7 +216,7 @@ fn build_output_file(
         let mut pairs: Vec<(&oxc_sourcemap::SourceMap, u32)> = Vec::new();
 
         for (i, module_path) in module_paths.iter().enumerate() {
-            let module = graph.modules.get(module_path).unwrap();
+            let module = graph.modules.get(*module_path).unwrap();
             if let Some(ref sm) = module.source_map {
                 pairs.push((sm, line_offset));
             }
@@ -252,14 +246,14 @@ fn build_output_file(
 fn build_entry_file(
     output_name: &str,
     entry_path: &Path,
-    exclusive_modules: &[PathBuf],
-    shared_chunks: &[SharedChunk],
+    exclusive_modules: &[&Path],
+    shared_chunks: &[SharedChunk<'_>],
     entry_idx: usize,
     graph: &ModuleGraph,
     source_maps: bool,
 ) -> Result<(OutputFile, Option<oxc_sourcemap::SourceMap>), String> {
-    let mut all_paths: Vec<PathBuf> = exclusive_modules.to_vec();
-    all_paths.push(entry_path.to_path_buf());
+    let mut all_paths: Vec<&Path> = exclusive_modules.to_vec();
+    all_paths.push(entry_path);
 
     let (mut output_file, raw_map) =
         build_output_file(output_name, &all_paths, graph, source_maps)?;
@@ -272,7 +266,13 @@ fn build_entry_file(
         .collect();
 
     if !relevant_chunks.is_empty() {
-        let mut with_chunks = String::new();
+        // Pre-calculate capacity to avoid reallocations.
+        let prefix_size: usize = relevant_chunks
+            .iter()
+            .map(|name| "import \"./".len() + name.len() + ".js\";\n".len())
+            .sum::<usize>()
+            + 1; // trailing newline separator
+        let mut with_chunks = String::with_capacity(prefix_size + output_file.content.len());
         let mut prepended_lines: u32 = 0;
         for chunk_name in &relevant_chunks {
             with_chunks.push_str("import \"./");

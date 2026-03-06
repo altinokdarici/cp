@@ -40,7 +40,6 @@ pub struct ModuleGraph {
 
 /// Intermediate state from Phase 1 (discovery). Holds source for Phase 2 (transform).
 struct DiscoveredModule {
-    path: PathBuf,
     source: String,
     needs_transform: bool,
     internal_imports: Vec<PathBuf>,
@@ -157,29 +156,27 @@ fn discover_module(
     visiting: &mut HashSet<PathBuf>,
     source_maps: bool,
 ) -> Result<(), String> {
-    let canonical = abs_path
-        .canonicalize()
-        .map_err(|e| format!("Failed to canonicalize {}: {e}", abs_path.display()))?;
-
-    if discovered.contains_key(&canonical) || visiting.contains(&canonical) {
+    // All callers provide canonical paths (resolve_entry canonicalizes, oxc_resolver
+    // returns canonical paths), so skip the redundant canonicalize() syscall.
+    if discovered.contains_key(abs_path) || visiting.contains(abs_path) {
         return Ok(());
     }
 
-    visiting.insert(canonical.clone());
+    visiting.insert(abs_path.to_path_buf());
 
-    let raw_content = std::fs::read_to_string(&canonical)
-        .map_err(|e| format!("Failed to read {}: {e}", canonical.display()))?;
+    let raw_content = std::fs::read_to_string(abs_path)
+        .map_err(|e| format!("Failed to read {}: {e}", abs_path.display()))?;
 
-    let load_result = loader::load(&canonical, raw_content)?;
+    let load_result = loader::load(abs_path, raw_content)?;
 
     // Parse for import extraction. For non-transform modules, we also strip imports
     // and codegen here to avoid a redundant re-parse in Phase 2.
     let allocator = Allocator::default();
-    let source_type = SourceType::from_path(&canonical).unwrap_or_default();
+    let source_type = SourceType::from_path(abs_path).unwrap_or_default();
     let mut parsed = Parser::new(&allocator, &load_result.source, source_type).parse();
 
     if parsed.panicked {
-        return Err(format!("Parse error in {}", canonical.display()));
+        return Err(format!("Parse error in {}", abs_path.display()));
     }
 
     let mut collector = ImportCollector::default();
@@ -187,7 +184,7 @@ fn discover_module(
 
     let mut internal_imports = Vec::new();
     let mut external_imports = Vec::new();
-    let module_dir = canonical.parent().unwrap();
+    let module_dir = abs_path.parent().unwrap();
 
     for specifier in &collector.specifiers {
         if is_relative_import(specifier) {
@@ -195,7 +192,7 @@ fn discover_module(
                 format!(
                     "Failed to resolve '{}' from {}: {e}",
                     specifier,
-                    canonical.display()
+                    abs_path.display()
                 )
             })?;
 
@@ -228,7 +225,7 @@ fn discover_module(
         strip_ast_imports(&mut parsed.program);
         if source_maps {
             let options = CodegenOptions {
-                source_map_path: Some(canonical.clone()),
+                source_map_path: Some(abs_path.to_path_buf()),
                 ..Default::default()
             };
             let result = Codegen::new()
@@ -245,10 +242,11 @@ fn discover_module(
         (load_result.source, None)
     };
 
+    // Recover the owned PathBuf from `visiting` to reuse for `discovered` (avoids extra clone).
+    let owned_path = visiting.take(abs_path).unwrap();
     discovered.insert(
-        canonical.clone(),
+        owned_path,
         DiscoveredModule {
-            path: canonical.clone(),
             source,
             needs_transform: load_result.needs_transform,
             internal_imports,
@@ -257,7 +255,6 @@ fn discover_module(
         },
     );
 
-    visiting.remove(&canonical);
     Ok(())
 }
 
@@ -270,7 +267,7 @@ fn finish_module(
     source_maps: bool,
 ) -> Result<(PathBuf, Module), String> {
     let (js_source, source_map) = if disc.needs_transform {
-        transform_and_codegen(&disc.path, &disc.source, source_maps)?
+        transform_and_codegen(&key, &disc.source, source_maps)?
     } else {
         (disc.source, disc.source_map)
     };
