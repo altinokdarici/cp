@@ -1,0 +1,27 @@
+[package]
+name = "compiler"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+oxc_allocator.workspace = true
+oxc_parser.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_span.workspace = true
+oxc_transformer.workspace = true
+oxc_codegen.workspace = true
+oxc_sourcemap.workspace = true
+oxc_resolver.workspace = true
+oxc_diagnostics.workspace = true
+oxc_semantic.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bench]]
+name = "compile_bench"
+harness = false

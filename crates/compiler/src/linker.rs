@@ -1,0 +1,239 @@
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use crate::compiler::OutputFile;
+use crate::graph::ModuleGraph;
+
+/// Determines which modules go into which output files (entries vs shared chunks).
+struct ChunkPlan {
+    entry_modules: HashMap<PathBuf, Vec<PathBuf>>,
+    shared_chunks: Vec<(String, Vec<PathBuf>)>,
+}
+
+/// Link a module graph into output files.
+///
+/// All modules are already transformed to JS in the graph phase.
+/// The linker only needs to: compute chunks, strip imports, concatenate, emit.
+pub fn link(graph: &ModuleGraph, package_root: &Path) -> Result<Vec<OutputFile>, String> {
+    let canonical_root = package_root
+        .canonicalize()
+        .unwrap_or(package_root.to_path_buf());
+
+    let plan = compute_chunk_plan(graph)?;
+    let mut outputs = Vec::with_capacity(plan.shared_chunks.len() + graph.entries.len());
+
+    // Build shared chunks first.
+    for (chunk_name, module_paths) in &plan.shared_chunks {
+        let output = build_output_file(&format!("{chunk_name}.js"), module_paths, graph)?;
+        outputs.push(output);
+    }
+
+    // Build entry files.
+    for entry_path in &graph.entries {
+        let entry_name = entry_name_from_path(entry_path, &canonical_root);
+        let exclusive = plan
+            .entry_modules
+            .get(entry_path)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
+
+        let output = build_entry_file(
+            &format!("{entry_name}.js"),
+            entry_path,
+            exclusive,
+            &plan.shared_chunks,
+            graph,
+        )?;
+        outputs.push(output);
+    }
+
+    Ok(outputs)
+}
+
+fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan, String> {
+    let entry_set: HashSet<&PathBuf> = graph.entries.iter().collect();
+    let mut module_entry_count: HashMap<&PathBuf, Vec<usize>> = HashMap::new();
+
+    for (entry_idx, entry) in graph.entries.iter().enumerate() {
+        let mut visited = HashSet::with_capacity(graph.modules.len());
+        collect_reachable(entry, graph, &mut visited);
+        for module_path in visited {
+            module_entry_count
+                .entry(module_path)
+                .or_insert_with(|| Vec::with_capacity(2))
+                .push(entry_idx);
+        }
+    }
+
+    let mut shared_modules: Vec<PathBuf> = Vec::new();
+    let mut entry_modules: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+
+    for entry in &graph.entries {
+        entry_modules.insert(entry.clone(), Vec::new());
+    }
+
+    for (module_path, entries) in &module_entry_count {
+        if entries.len() > 1 {
+            if !entry_set.contains(module_path) {
+                shared_modules.push((*module_path).clone());
+            }
+        } else {
+            let entry = &graph.entries[entries[0]];
+            if *module_path != entry {
+                entry_modules
+                    .entry(entry.clone())
+                    .or_default()
+                    .push((*module_path).clone());
+            }
+        }
+    }
+
+    let shared_chunks = if shared_modules.is_empty() {
+        vec![]
+    } else {
+        shared_modules.sort();
+        vec![("chunk-shared".to_string(), shared_modules)]
+    };
+
+    Ok(ChunkPlan {
+        entry_modules,
+        shared_chunks,
+    })
+}
+
+fn collect_reachable<'a>(
+    module_path: &'a PathBuf,
+    graph: &'a ModuleGraph,
+    visited: &mut HashSet<&'a PathBuf>,
+) {
+    if !visited.insert(module_path) {
+        return;
+    }
+    if let Some(module) = graph.modules.get(module_path) {
+        for dep in &module.internal_imports {
+            collect_reachable(dep, graph, visited);
+        }
+    }
+}
+
+fn build_output_file(
+    output_name: &str,
+    module_paths: &[PathBuf],
+    graph: &ModuleGraph,
+) -> Result<OutputFile, String> {
+    // Dedup external imports using HashSet (O(1) lookup instead of Vec::contains).
+    let mut seen_imports: HashSet<&str> = HashSet::new();
+    let mut all_external_imports: Vec<&str> = Vec::new();
+    let mut stripped_bodies: Vec<String> = Vec::with_capacity(module_paths.len());
+
+    for module_path in module_paths {
+        let module = graph
+            .modules
+            .get(module_path)
+            .ok_or_else(|| format!("Module not found: {}", module_path.display()))?;
+
+        for ext in &module.external_imports {
+            if seen_imports.insert(ext.as_str()) {
+                all_external_imports.push(ext.as_str());
+            }
+        }
+
+        // js_source is already transformed — just strip import lines.
+        stripped_bodies.push(strip_imports(&module.js_source));
+    }
+
+    // Estimate output size to pre-allocate.
+    let body_size: usize = stripped_bodies.iter().map(|s| s.len() + 1).sum();
+    let imports_size: usize = all_external_imports.iter().map(|s| s.len() + 30).sum();
+    let mut output = String::with_capacity(body_size + imports_size);
+
+    for ext_import in &all_external_imports {
+        output.push_str("import * as _ext_");
+        push_safe_identifier(&mut output, ext_import);
+        output.push_str(" from \"");
+        output.push_str(ext_import);
+        output.push_str("\";\n");
+    }
+
+    if !all_external_imports.is_empty() {
+        output.push('\n');
+    }
+
+    for body in &stripped_bodies {
+        output.push_str(body);
+        output.push('\n');
+    }
+
+    Ok(OutputFile {
+        name: output_name.to_string(),
+        content: output,
+        source_map: None,
+    })
+}
+
+fn build_entry_file(
+    output_name: &str,
+    entry_path: &Path,
+    exclusive_modules: &[PathBuf],
+    shared_chunks: &[(String, Vec<PathBuf>)],
+    graph: &ModuleGraph,
+) -> Result<OutputFile, String> {
+    let mut all_paths: Vec<PathBuf> = exclusive_modules.to_vec();
+    all_paths.push(entry_path.to_path_buf());
+
+    let mut output_file = build_output_file(output_name, &all_paths, graph)?;
+
+    // Prepend chunk imports without extra allocation via format!.
+    if !shared_chunks.is_empty() {
+        let mut with_chunks = String::new();
+        for (chunk_name, _) in shared_chunks {
+            with_chunks.push_str("import \"./");
+            with_chunks.push_str(chunk_name);
+            with_chunks.push_str(".js\";\n");
+        }
+        with_chunks.push('\n');
+        with_chunks.push_str(&output_file.content);
+        output_file.content = with_chunks;
+    }
+
+    Ok(output_file)
+}
+
+/// Strip import declarations from JS source. Single-pass, no intermediate Vec.
+fn strip_imports(source: &str) -> String {
+    let mut output = String::with_capacity(source.len());
+    for line in source.lines() {
+        let trimmed = line.trim();
+        let is_import = (trimmed.starts_with("import ") && trimmed.contains(" from "))
+            || trimmed.starts_with("import \"")
+            || trimmed.starts_with("import '");
+        if !is_import {
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+    output
+}
+
+fn entry_name_from_path(entry_path: &Path, canonical_root: &Path) -> String {
+    let relative = entry_path
+        .strip_prefix(canonical_root)
+        .unwrap_or(entry_path);
+
+    relative
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("index")
+        .to_string()
+}
+
+/// Write a safe identifier directly to output, avoiding a String allocation.
+fn push_safe_identifier(output: &mut String, specifier: &str) {
+    for c in specifier.chars() {
+        if c.is_alphanumeric() {
+            output.push(c);
+        } else {
+            output.push('_');
+        }
+    }
+}

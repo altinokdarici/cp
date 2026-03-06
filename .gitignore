@@ -1,0 +1,4 @@
+/target
+dist/
+.claude/settings.local.json
+PRODUCT_DOCUMENT.md

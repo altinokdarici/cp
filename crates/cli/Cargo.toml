@@ -1,0 +1,12 @@
+[package]
+name = "cp"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "cp"
+path = "src/main.rs"
+
+[dependencies]
+compiler = { path = "../compiler" }
+serde_json.workspace = true
