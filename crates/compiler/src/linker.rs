@@ -133,7 +133,7 @@ fn build_output_file(
     // Dedup external imports using HashSet (O(1) lookup instead of Vec::contains).
     let mut seen_imports: HashSet<&str> = HashSet::new();
     let mut all_external_imports: Vec<&str> = Vec::new();
-    let mut stripped_bodies: Vec<String> = Vec::with_capacity(module_paths.len());
+    let mut module_sources: Vec<&str> = Vec::with_capacity(module_paths.len());
 
     for module_path in module_paths {
         let module = graph
@@ -147,12 +147,12 @@ fn build_output_file(
             }
         }
 
-        // js_source is already transformed — just strip import lines.
-        stripped_bodies.push(strip_imports(&module.js_source));
+        // js_source already has imports stripped at the AST level in the graph phase.
+        module_sources.push(&module.js_source);
     }
 
     // Estimate output size to pre-allocate.
-    let body_size: usize = stripped_bodies.iter().map(|s| s.len() + 1).sum();
+    let body_size: usize = module_sources.iter().map(|s| s.len() + 1).sum();
     let imports_size: usize = all_external_imports.iter().map(|s| s.len() + 30).sum();
     let mut output = String::with_capacity(body_size + imports_size);
 
@@ -168,7 +168,7 @@ fn build_output_file(
         output.push('\n');
     }
 
-    for body in &stripped_bodies {
+    for body in &module_sources {
         output.push_str(body);
         output.push('\n');
     }
@@ -206,29 +206,6 @@ fn build_entry_file(
     }
 
     Ok(output_file)
-}
-
-/// Strip import declarations and internal re-export-from lines from JS source.
-fn strip_imports(source: &str) -> String {
-    let mut output = String::with_capacity(source.len());
-    for line in source.lines() {
-        let trimmed = line.trim();
-        let is_import = (trimmed.starts_with("import ") && trimmed.contains(" from "))
-            || trimmed.starts_with("import \"")
-            || trimmed.starts_with("import '");
-        // Strip `export * from './...'` and `export { x } from './...'` for internal modules.
-        let is_internal_reexport = trimmed.starts_with("export ")
-            && trimmed.contains(" from ")
-            && (trimmed.contains("from \"./")
-                || trimmed.contains("from './")
-                || trimmed.contains("from \"../")
-                || trimmed.contains("from '../"));
-        if !is_import && !is_internal_reexport {
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
-    output
 }
 
 fn entry_name_from_path(entry_path: &Path, canonical_root: &Path) -> String {
