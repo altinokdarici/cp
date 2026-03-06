@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772828376874,
+  "lastUpdate": 1772829009162,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -116,6 +116,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 28238018,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "743971998c671318711d6364c94b63f65fbc0d08",
+          "message": "fix: strip internal re-exports, disambiguate entry names, add tests (#3)",
+          "timestamp": "2026-03-06T12:29:39-08:00",
+          "tree_id": "ef811e935026e368079cc7ffb9f716ed917ad946",
+          "url": "https://github.com/altinokdarici/cp/commit/743971998c671318711d6364c94b63f65fbc0d08"
+        },
+        "date": 1772829008330,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 1212748,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 5420845,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 27023310,
             "unit": "ns/iter"
           }
         ]
