@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::compiler::OutputFile;
-use crate::graph::ModuleGraph;
+use crate::graph::{CssModuleBindingKind, Module, ModuleGraph};
 
 /// A shared chunk produced by the chunk planner.
 struct SharedChunk<'a> {
@@ -166,8 +166,12 @@ fn build_output_file(
     // Dedup external imports using HashSet (O(1) lookup instead of Vec::contains).
     let mut seen_imports: HashSet<&str> = HashSet::new();
     let mut all_external_imports: Vec<&str> = Vec::new();
-    let mut module_sources: Vec<&str> = Vec::with_capacity(module_paths.len());
 
+    // Pre-build CSS binding injections for each module.
+    let mut css_injections: Vec<String> = Vec::with_capacity(module_paths.len());
+
+    // First pass: collect external imports, build CSS injections, estimate size.
+    let mut body_size: usize = 0;
     for module_path in module_paths {
         let module = graph
             .modules
@@ -180,12 +184,13 @@ fn build_output_file(
             }
         }
 
-        // js_source already has imports stripped at the AST level in the graph phase.
-        module_sources.push(&module.js_source);
+        let mut injection = String::new();
+        inject_css_bindings(&mut injection, module, graph);
+        body_size += injection.len() + module.js_source.len() + 1;
+        css_injections.push(injection);
     }
 
     // Estimate output size to pre-allocate.
-    let body_size: usize = module_sources.iter().map(|s| s.len() + 1).sum();
     let imports_size: usize = all_external_imports.iter().map(|s| s.len() + 30).sum();
     let mut output = String::with_capacity(body_size + imports_size);
 
@@ -201,8 +206,10 @@ fn build_output_file(
         output.push('\n');
     }
 
-    for body in &module_sources {
-        output.push_str(body);
+    for (i, module_path) in module_paths.iter().enumerate() {
+        let module = graph.modules.get(*module_path).unwrap();
+        output.push_str(&css_injections[i]);
+        output.push_str(&module.js_source);
         output.push('\n');
     }
 
@@ -217,10 +224,15 @@ fn build_output_file(
 
         for (i, module_path) in module_paths.iter().enumerate() {
             let module = graph.modules.get(*module_path).unwrap();
+
+            // Account for CSS binding injection lines before this module's source.
+            let injection_lines = css_injections[i].bytes().filter(|b| *b == b'\n').count() as u32;
+            line_offset += injection_lines;
+
             if let Some(ref sm) = module.source_map {
                 pairs.push((sm, line_offset));
             }
-            let lines_in_body = module_sources[i].bytes().filter(|b| *b == b'\n').count() as u32;
+            let lines_in_body = module.js_source.bytes().filter(|b| *b == b'\n').count() as u32;
             line_offset += lines_in_body + 1; // +1 for the \n we append
         }
 
@@ -297,6 +309,54 @@ fn build_entry_file(
     }
 
     Ok((output_file, raw_map))
+}
+
+/// Inject `const` declarations for CSS module bindings before a module's JS source.
+fn inject_css_bindings(output: &mut String, module: &Module, graph: &ModuleGraph) {
+    for binding in &module.css_module_bindings {
+        let Some(css_module) = graph.modules.get(&binding.css_module_path) else {
+            debug_assert!(
+                false,
+                "CSS module not found in graph: {}",
+                binding.css_module_path.display()
+            );
+            continue;
+        };
+        let exports = match &css_module.css_module_exports {
+            Some(e) => e,
+            None => continue,
+        };
+
+        match &binding.kind {
+            CssModuleBindingKind::Default(name) | CssModuleBindingKind::Namespace(name) => {
+                output.push_str("const ");
+                output.push_str(name);
+                output.push_str(" = { ");
+                for (i, (key, value)) in exports.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    output.push('"');
+                    output.push_str(key);
+                    output.push_str("\": \"");
+                    output.push_str(value);
+                    output.push('"');
+                }
+                output.push_str(" };\n");
+            }
+            CssModuleBindingKind::Named(pairs) => {
+                for (imported, local) in pairs {
+                    if let Some(scoped) = exports.get(imported.as_str()) {
+                        output.push_str("const ");
+                        output.push_str(local);
+                        output.push_str(" = \"");
+                        output.push_str(scoped);
+                        output.push_str("\";\n");
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Convert a raw SourceMap to JSON string and append sourceMappingURL comment.

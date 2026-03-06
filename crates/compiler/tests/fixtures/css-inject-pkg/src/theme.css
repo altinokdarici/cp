@@ -1,0 +1,9 @@
+:root {
+  --primary: #0078d4;
+  --bg: #ffffff;
+}
+
+.dark {
+  --primary: #4ea8de;
+  --bg: #1e1e1e;
+}
