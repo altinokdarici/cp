@@ -3,6 +3,11 @@ use std::time::Instant;
 
 use compiler::{CompileOptions, compile};
 
+struct BenchResult {
+    name: String,
+    value_ns: u128,
+}
+
 /// Generate a realistic package with N modules, M entries, and external imports.
 fn generate_package(root: &std::path::Path, num_modules: usize, num_entries: usize) {
     std::fs::create_dir_all(root.join("src")).unwrap();
@@ -88,7 +93,7 @@ export function Entry{e}(props: Entry{e}Props): React.ReactElement {{
     }
 }
 
-fn bench(label: &str, iterations: u32, f: impl Fn()) {
+fn bench(label: &str, iterations: u32, f: impl Fn()) -> BenchResult {
     // Warmup.
     f();
 
@@ -100,10 +105,16 @@ fn bench(label: &str, iterations: u32, f: impl Fn()) {
     let per_iter = elapsed / iterations;
 
     println!("{label}: {per_iter:?} per iteration ({iterations} iterations, {elapsed:?} total)");
+
+    BenchResult {
+        name: label.to_string(),
+        value_ns: per_iter.as_nanos(),
+    }
 }
 
 fn main() {
     let temp = tempfile::tempdir().unwrap();
+    let mut results = Vec::new();
 
     // Small package: 20 modules, 2 entries.
     let small_root = temp.path().join("small");
@@ -113,13 +124,13 @@ fn main() {
         .map(|e| PathBuf::from(format!("src/entry{e}.ts")))
         .collect();
 
-    bench("small (20 modules, 2 entries)", 100, || {
+    results.push(bench("small (20 modules, 2 entries)", 100, || {
         compile(CompileOptions {
             package_root: small_root.clone(),
             entries: small_entries.clone(),
         })
         .unwrap();
-    });
+    }));
 
     // Medium package: 100 modules, 5 entries.
     let medium_root = temp.path().join("medium");
@@ -129,13 +140,13 @@ fn main() {
         .map(|e| PathBuf::from(format!("src/entry{e}.ts")))
         .collect();
 
-    bench("medium (100 modules, 5 entries)", 20, || {
+    results.push(bench("medium (100 modules, 5 entries)", 20, || {
         compile(CompileOptions {
             package_root: medium_root.clone(),
             entries: medium_entries.clone(),
         })
         .unwrap();
-    });
+    }));
 
     // Large package: 500 modules, 10 entries.
     let large_root = temp.path().join("large");
@@ -145,11 +156,26 @@ fn main() {
         .map(|e| PathBuf::from(format!("src/entry{e}.ts")))
         .collect();
 
-    bench("large (500 modules, 10 entries)", 5, || {
+    results.push(bench("large (500 modules, 10 entries)", 5, || {
         compile(CompileOptions {
             package_root: large_root.clone(),
             entries: large_entries.clone(),
         })
         .unwrap();
-    });
+    }));
+
+    // Write machine-readable JSON for CI (github-action-benchmark customSmallerIsBetter format).
+    let json: Vec<String> = results
+        .iter()
+        .map(|r| {
+            format!(
+                r#"  {{ "name": "{}", "unit": "ns/iter", "value": {} }}"#,
+                r.name, r.value_ns
+            )
+        })
+        .collect();
+    let json_output = format!("[\n{}\n]", json.join(",\n"));
+    let output_path =
+        std::env::var("BENCH_OUTPUT").unwrap_or_else(|_| "bench-results.json".to_string());
+    std::fs::write(output_path, json_output).ok();
 }

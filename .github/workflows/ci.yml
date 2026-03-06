@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -48,3 +52,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
+
+  bench:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench --bench compile_bench
+        env:
+          BENCH_OUTPUT: ${{ github.workspace }}/bench-results.json
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: customSmallerIsBetter
+          output-file-path: ${{ github.workspace }}/bench-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          alert-threshold: "150%"
+          comment-on-alert: true
+          fail-on-alert: false
+          comment-always: ${{ github.event_name == 'pull_request' }}
+          save-data-file: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

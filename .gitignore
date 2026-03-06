@@ -2,3 +2,4 @@
 dist/
 .claude/settings.local.json
 PRODUCT_DOCUMENT.md
+bench-results.json
