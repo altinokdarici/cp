@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772835165632,
+  "lastUpdate": 1772835708197,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -311,6 +311,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 26412747,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18505b722fd9a3918d999b8c445b840cae8d0b5b",
+          "message": "perf: eliminate redundant syscalls and allocations in graph/linker (#8)\n\n- Remove canonicalize() syscall in discover_module (callers already provide canonical paths)\n- Remove DiscoveredModule.path field, reuse HashMap key in finish_module\n- Use HashSet::take to recover owned PathBuf from visiting set (avoids extra clone)\n- Use &Path references in ChunkPlan instead of cloning PathBuf throughout linker\n- Pre-allocate chunk import prefix string in build_entry_file",
+          "timestamp": "2026-03-06T14:21:18-08:00",
+          "tree_id": "8f4df6ba4c58c52a23ffc78d33b26052c7b150af",
+          "url": "https://github.com/altinokdarici/cp/commit/18505b722fd9a3918d999b8c445b840cae8d0b5b"
+        },
+        "date": 1772835707714,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 861357,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3393210,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16294168,
             "unit": "ns/iter"
           }
         ]
