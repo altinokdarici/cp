@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772834202949,
+  "lastUpdate": 1772835165632,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -272,6 +272,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 26619649,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eea6e069e4473c12f3e189af6778a62160516988",
+          "message": "feat: split shared chunks by entry set for selective imports (#7)",
+          "timestamp": "2026-03-06T14:12:14-08:00",
+          "tree_id": "d4967d21c607d382344babed974f94eabdb89c67",
+          "url": "https://github.com/altinokdarici/cp/commit/eea6e069e4473c12f3e189af6778a62160516988"
+        },
+        "date": 1772835165145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 1359022,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 6012173,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 26412747,
             "unit": "ns/iter"
           }
         ]
