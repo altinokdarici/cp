@@ -62,7 +62,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench --bench compile_bench
         env:
-          BENCH_OUTPUT: ${{ github.workspace }}/bench-results.json
+          BENCH_OUTPUT: ${{ github.workspace }}/compile-bench.json
+      - run: cargo bench --bench trace_bench
+        env:
+          BENCH_OUTPUT: ${{ github.workspace }}/trace-bench.json
+      - name: Merge benchmark results
+        run: |
+          python3 -c "
+          import json, sys
+          results = []
+          for f in sys.argv[1:]:
+              with open(f) as fh:
+                  results.extend(json.load(fh))
+          print(json.dumps(results, indent=2))
+          " ${{ github.workspace }}/compile-bench.json ${{ github.workspace }}/trace-bench.json > ${{ github.workspace }}/bench-results.json
+      - run: git checkout -- .
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
