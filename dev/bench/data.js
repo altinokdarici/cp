@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772840666490,
+  "lastUpdate": 1772905741957,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -428,6 +428,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "large (500 modules, 10 entries)",
             "value": 16593484,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8169ad58cc31da94c0788c303a989d12d20759a0",
+          "message": "feat: add depgraph crate for parallel cross-package dependency tracing (#11)",
+          "timestamp": "2026-03-07T09:48:31-08:00",
+          "tree_id": "bc93e94988ce9472576d3c5c2ec568f332f9a442",
+          "url": "https://github.com/altinokdarici/cp/commit/8169ad58cc31da94c0788c303a989d12d20759a0"
+        },
+        "date": 1772905741659,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 878833,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3467107,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16491623,
             "unit": "ns/iter"
           }
         ]
