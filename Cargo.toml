@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/compiler",
     "crates/depgraph",
+    "crates/builder",
     "crates/cli",
 ]
 
