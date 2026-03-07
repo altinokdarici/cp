@@ -9,4 +9,5 @@ path = "src/main.rs"
 
 [dependencies]
 compiler = { path = "../compiler" }
+builder = { path = "../builder" }
 serde_json.workspace = true
