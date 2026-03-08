@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772991210695,
+  "lastUpdate": 1772991882252,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -845,6 +845,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 13843760,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a06d7079c9a3109b2fb028e58f7337c9698f5de3",
+          "message": "feat: CLI dist-cp output and unresolved import reporting (#18)\n\n* feat: CLI dist-cp output and unresolved import reporting\n\n* fix: add comment explaining +1 package count",
+          "timestamp": "2026-03-08T10:44:05-07:00",
+          "tree_id": "fd4dd95df710d65318ea16ff14edd4af51195e9f",
+          "url": "https://github.com/altinokdarici/cp/commit/a06d7079c9a3109b2fb028e58f7337c9698f5de3"
+        },
+        "date": 1772991881842,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 895494,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3512775,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16745087,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 938239,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3731538,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 13668369,
             "unit": "ns/iter"
           }
         ]
