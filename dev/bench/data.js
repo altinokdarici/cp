@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772989339826,
+  "lastUpdate": 1772990489122,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -737,6 +737,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 13469203,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc4f494f8537a13adf04caef285ee10a77af765c",
+          "message": "feat: collect unresolved imports and detect Node.js builtins (#16)\n\n* feat: collect unresolved imports and detect Node.js builtins\n\n* fix: validate node: prefixed specifiers against builtin allowlist\n\n* fix: add missing test builtin and update UnresolvedImport doc",
+          "timestamp": "2026-03-08T10:20:51-07:00",
+          "tree_id": "2ce545c6ab7f4f52a2c76f905f4d408a5f92cfa0",
+          "url": "https://github.com/altinokdarici/cp/commit/cc4f494f8537a13adf04caef285ee10a77af765c"
+        },
+        "date": 1772990488350,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 887534,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3505143,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16482303,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 925126,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3685777,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 13623876,
             "unit": "ns/iter"
           }
         ]
