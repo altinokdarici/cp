@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772988174367,
+  "lastUpdate": 1772989339826,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -683,6 +683,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 14093520,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e086c12891c6db14d9e4da1125da795a07021f47",
+          "message": "feat: resolve transitive deps via realpath for pnpm compatibility (#15)\n\n* feat: resolve transitive deps via realpath for pnpm compatibility\n\n* fix: address review comments on docs and dead code\n\n* fix: remove dead seen_dirs and clarify trace comment",
+          "timestamp": "2026-03-08T10:01:42-07:00",
+          "tree_id": "f49ff7002b50ca4a25a9a5d46a0fd50b7c6cb2bf",
+          "url": "https://github.com/altinokdarici/cp/commit/e086c12891c6db14d9e4da1125da795a07021f47"
+        },
+        "date": 1772989339355,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 879478,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3504190,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16621803,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 924501,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3673183,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 13469203,
             "unit": "ns/iter"
           }
         ]
