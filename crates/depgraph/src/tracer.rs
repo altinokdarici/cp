@@ -41,8 +41,6 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
 
     // Cross-package BFS: resolve externals, trace each new package, repeat.
     let mut packages_map: HashMap<PathBuf, PackageInfo> = HashMap::new();
-    // Track resolved directories to avoid tracing the same package twice.
-    let mut seen_dirs: HashSet<PathBuf> = HashSet::new();
 
     // Seed with app externals, resolved from app_root.
     let mut pending: Vec<(String, PathBuf)> = app_externals
@@ -81,7 +79,6 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
                 pkg.entries.push(resolved.entry_relative.clone());
                 pkg.specifiers.push(specifier);
 
-                seen_dirs.insert(canonical_dir.clone());
                 new_traces.push((
                     canonical_dir.clone(),
                     resolved.resolve_dir,
@@ -90,7 +87,7 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
             }
         }
 
-        // Trace all new entries — parallel if 4+ packages, sequential otherwise.
+        // Trace all new entries — parallel if 4+ trace jobs, sequential otherwise.
         let all_externals: Vec<Vec<String>> = if new_traces.len() >= 4 {
             new_traces
                 .par_iter()
