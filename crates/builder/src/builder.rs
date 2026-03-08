@@ -39,6 +39,8 @@ pub struct BuildOutput {
     pub packages: Vec<CompiledPackage>,
     /// Maps bare specifiers to virtual paths for browser resolution.
     pub import_map: ImportMap,
+    /// Specifiers found in source code that could not be resolved.
+    pub unresolved: Vec<depgraph::UnresolvedImport>,
 }
 
 /// Errors that can occur during a build.
@@ -121,5 +123,6 @@ pub fn build(options: BuildOptions) -> Result<BuildOutput, BuildError> {
         app,
         packages,
         import_map,
+        unresolved: trace_output.unresolved,
     })
 }

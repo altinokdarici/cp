@@ -20,6 +20,18 @@ pub struct TraceOptions {
 pub struct TraceOutput {
     /// All transitively discovered npm packages.
     pub packages: Vec<PackageInfo>,
+    /// Specifiers that were found in source code but could not be resolved
+    /// (e.g. undeclared/phantom dependencies).
+    pub unresolved: Vec<UnresolvedImport>,
+}
+
+/// An import specifier found in source code that could not be resolved.
+#[derive(Debug)]
+pub struct UnresolvedImport {
+    /// The bare specifier that failed to resolve.
+    pub specifier: String,
+    /// The package directory from which resolution was attempted.
+    pub resolve_from: PathBuf,
 }
 
 /// Metadata for a discovered npm package.

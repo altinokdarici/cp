@@ -43,6 +43,65 @@ pub fn is_relative_import(specifier: &str) -> bool {
     specifier.starts_with("./") || specifier.starts_with("../")
 }
 
+/// Check if a specifier is a Node.js builtin module.
+///
+/// Matches the `node:` prefix form and all well-known unprefixed builtin names.
+/// This is used as a fallback when resolution fails — if the specifier can't be
+/// found in node_modules AND it's a known builtin, we silently skip it rather
+/// than reporting it as unresolved. If it IS in node_modules, we trace it
+/// normally (even if the name matches a builtin).
+pub fn is_node_builtin(specifier: &str) -> bool {
+    if specifier.starts_with("node:") {
+        return true;
+    }
+    let base = specifier.split('/').next().unwrap_or(specifier);
+    matches!(
+        base,
+        "assert"
+            | "async_hooks"
+            | "buffer"
+            | "child_process"
+            | "cluster"
+            | "console"
+            | "constants"
+            | "crypto"
+            | "dgram"
+            | "diagnostics_channel"
+            | "dns"
+            | "domain"
+            | "events"
+            | "fs"
+            | "http"
+            | "http2"
+            | "https"
+            | "inspector"
+            | "module"
+            | "net"
+            | "os"
+            | "path"
+            | "perf_hooks"
+            | "process"
+            | "punycode"
+            | "querystring"
+            | "readline"
+            | "repl"
+            | "stream"
+            | "string_decoder"
+            | "sys"
+            | "timers"
+            | "tls"
+            | "trace_events"
+            | "tty"
+            | "url"
+            | "util"
+            | "v8"
+            | "vm"
+            | "wasi"
+            | "worker_threads"
+            | "zlib"
+    )
+}
+
 /// Check if a file extension indicates JS-like content that may contain imports.
 pub fn has_js_imports(path: &Path) -> bool {
     path.extension()
