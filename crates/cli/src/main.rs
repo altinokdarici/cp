@@ -88,6 +88,7 @@ fn run_build(args: &[String]) {
         source_maps,
     }) {
         Ok(output) => {
+            // +1 includes the application package (output.app).
             eprintln!("Compiled {} packages", output.packages.len() + 1);
             std::fs::create_dir_all(&dist_dir).unwrap();
 
