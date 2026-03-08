@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772944715761,
+  "lastUpdate": 1772944798832,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -575,6 +575,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 13613923,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d73e2f01ca52ae9f02d1d626b7443a795e7fb61c",
+          "message": "fix: truncate chunk filenames exceeding OS limits (#14)",
+          "timestamp": "2026-03-07T20:39:22-08:00",
+          "tree_id": "70ee11ddeaa9a1a5b455e9d571a3913b865cc902",
+          "url": "https://github.com/altinokdarici/cp/commit/d73e2f01ca52ae9f02d1d626b7443a795e7fb61c"
+        },
+        "date": 1772944798531,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 887981,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3511534,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16520517,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 937424,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3721774,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 13802925,
             "unit": "ns/iter"
           }
         ]
