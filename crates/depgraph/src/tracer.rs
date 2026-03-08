@@ -54,7 +54,8 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
         let batch = std::mem::take(&mut pending);
 
         // Resolve all specifiers in this batch, accumulate entries per package,
-        // and collect (canonical_dir, resolve_dir, entries) for newly discovered packages.
+        // and collect (canonical_dir, resolve_dir, entries) for packages that need tracing
+        // (either newly discovered packages or already-seen packages with new entry points).
         // canonical_dir: real path for tracing files and dedup.
         // resolve_dir: realpath-based path for resolving transitive deps (pnpm needs this).
         let mut new_traces: Vec<(PathBuf, PathBuf, Vec<PathBuf>)> = Vec::new();
@@ -80,20 +81,12 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
                 pkg.entries.push(resolved.entry_relative.clone());
                 pkg.specifiers.push(specifier);
 
-                if seen_dirs.insert(canonical_dir.clone()) {
-                    new_traces.push((
-                        canonical_dir.clone(),
-                        resolved.resolve_dir,
-                        vec![resolved.entry_relative],
-                    ));
-                } else {
-                    // Package already traced — trace just the new entry to find its externals.
-                    new_traces.push((
-                        canonical_dir.clone(),
-                        resolved.resolve_dir,
-                        vec![resolved.entry_relative],
-                    ));
-                }
+                seen_dirs.insert(canonical_dir.clone());
+                new_traces.push((
+                    canonical_dir.clone(),
+                    resolved.resolve_dir,
+                    vec![resolved.entry_relative],
+                ));
             }
         }
 

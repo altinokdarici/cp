@@ -12,9 +12,9 @@ pub struct ResolvedPackage {
     pub directory: PathBuf,
     /// The resolved file path relative to the package root.
     pub entry_relative: PathBuf,
-    /// The original (pre-canonicalize) directory from package.json.
-    /// In pnpm layouts this is the symlinked path inside `.pnpm/` which
-    /// has sibling node_modules for dependency resolution.
+    /// The realpath-derived directory used as the base for resolving transitive deps.
+    /// In pnpm layouts this points inside `.pnpm/pkg@ver/node_modules/pkg/` where
+    /// sibling node_modules are visible for dependency resolution.
     pub resolve_dir: PathBuf,
 }
 
