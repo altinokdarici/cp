@@ -80,7 +80,7 @@ fn run_build(args: &[String]) {
 
     let app_root = PathBuf::from(positional[0]);
     let entries: Vec<PathBuf> = positional[1..].iter().map(PathBuf::from).collect();
-    let dist_dir = app_root.join("dist");
+    let dist_dir = app_root.join("dist-cp");
 
     match builder::build(builder::BuildOptions {
         app_root: app_root.clone(),
@@ -88,6 +88,8 @@ fn run_build(args: &[String]) {
         source_maps,
     }) {
         Ok(output) => {
+            // +1 includes the application package (output.app).
+            eprintln!("Compiled {} packages", output.packages.len() + 1);
             std::fs::create_dir_all(&dist_dir).unwrap();
 
             // Write app files under _app/.
@@ -127,6 +129,15 @@ fn run_build(args: &[String]) {
             let import_map_json = serde_json::to_string_pretty(&output.import_map).unwrap();
             std::fs::write(&import_map_path, &import_map_json).unwrap();
             println!("  {}", import_map_path.display());
+
+            // Report unresolved imports and exit with error.
+            if !output.unresolved.is_empty() {
+                eprintln!("\nError: {} unresolved import(s):", output.unresolved.len());
+                for u in &output.unresolved {
+                    eprintln!("  '{}' (from {})", u.specifier, u.resolve_from.display());
+                }
+                process::exit(1);
+            }
         }
         Err(e) => {
             eprintln!("Error: {e}");
