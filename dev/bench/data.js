@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772906055959,
+  "lastUpdate": 1772944715761,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -521,6 +521,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 13525692,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5aee875905c99ddd420df32fc4081ad471485e6e",
+          "message": "feat: add resjson and audio/video asset type support (#13)",
+          "timestamp": "2026-03-07T20:37:59-08:00",
+          "tree_id": "c9f7aaa188221f11320293b154fb072b0fbc1b52",
+          "url": "https://github.com/altinokdarici/cp/commit/5aee875905c99ddd420df32fc4081ad471485e6e"
+        },
+        "date": 1772944715381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 888616,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3541271,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16683772,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 926123,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3696424,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 13613923,
             "unit": "ns/iter"
           }
         ]
