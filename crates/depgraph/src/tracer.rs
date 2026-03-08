@@ -54,8 +54,10 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
         let batch = std::mem::take(&mut pending);
 
         // Resolve all specifiers in this batch, accumulate entries per package,
-        // and collect (pkg_dir, entries_to_trace) for newly discovered packages.
-        let mut new_traces: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+        // and collect (canonical_dir, resolve_dir, entries) for newly discovered packages.
+        // canonical_dir: real path for tracing files and dedup.
+        // resolve_dir: realpath-based path for resolving transitive deps (pnpm needs this).
+        let mut new_traces: Vec<(PathBuf, PathBuf, Vec<PathBuf>)> = Vec::new();
 
         for (specifier, resolve_from) in batch {
             let resolved = resolve_specifier(&resolver, &resolve_from, &specifier)?;
@@ -78,35 +80,41 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
                 pkg.entries.push(resolved.entry_relative.clone());
                 pkg.specifiers.push(specifier);
 
-                // If this is a brand-new package directory, queue it for tracing.
                 if seen_dirs.insert(canonical_dir.clone()) {
-                    new_traces.push((canonical_dir.clone(), vec![resolved.entry_relative]));
+                    new_traces.push((
+                        canonical_dir.clone(),
+                        resolved.resolve_dir,
+                        vec![resolved.entry_relative],
+                    ));
                 } else {
                     // Package already traced — trace just the new entry to find its externals.
-                    new_traces.push((canonical_dir.clone(), vec![resolved.entry_relative]));
+                    new_traces.push((
+                        canonical_dir.clone(),
+                        resolved.resolve_dir,
+                        vec![resolved.entry_relative],
+                    ));
                 }
             }
-            // If the entry is already known, skip — the specifier is a duplicate
-            // from a different resolve_from and doesn't add new information.
         }
 
         // Trace all new entries — parallel if 4+ packages, sequential otherwise.
         let all_externals: Vec<Vec<String>> = if new_traces.len() >= 4 {
             new_traces
                 .par_iter()
-                .map(|(pkg_dir, entries)| trace_package(&resolver, pkg_dir, entries))
+                .map(|(pkg_dir, _, entries)| trace_package(&resolver, pkg_dir, entries))
                 .collect::<Result<_, _>>()?
         } else {
             new_traces
                 .iter()
-                .map(|(pkg_dir, entries)| trace_package(&resolver, pkg_dir, entries))
+                .map(|(pkg_dir, _, entries)| trace_package(&resolver, pkg_dir, entries))
                 .collect::<Result<_, _>>()?
         };
 
-        // Enqueue newly discovered externals.
-        for (externals, (pkg_dir, _)) in all_externals.into_iter().zip(&new_traces) {
+        // Enqueue newly discovered externals, resolving from the realpath-based
+        // directory so pnpm's sibling node_modules symlinks are visible.
+        for (externals, (_, resolve_dir, _)) in all_externals.into_iter().zip(&new_traces) {
             for ext in externals {
-                pending.push((ext, pkg_dir.clone()));
+                pending.push((ext, resolve_dir.clone()));
             }
         }
     }
