@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772990489122,
+  "lastUpdate": 1772991210695,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -791,6 +791,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 13623876,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79e08ff1417cf45e66ca5cf7044877b739155282",
+          "message": "feat: collect require() and dynamic import() specifiers in depgraph (#17)\n\n* feat: collect require() and dynamic import() specifiers in depgraph\n\n* fix: recurse into callee and source expressions in collector",
+          "timestamp": "2026-03-08T10:32:50-07:00",
+          "tree_id": "6d1eac754c871778735ec299c157d5e15765c6d9",
+          "url": "https://github.com/altinokdarici/cp/commit/79e08ff1417cf45e66ca5cf7044877b739155282"
+        },
+        "date": 1772991209865,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 868984,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3449582,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 16372836,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 937353,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3743895,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 13843760,
             "unit": "ns/iter"
           }
         ]
