@@ -10,9 +10,10 @@ use rayon::prelude::*;
 
 use crate::collector::ImportCollector;
 use crate::resolver::{
-    create_resolver, has_js_imports, is_relative_import, resolve_entry, resolve_specifier,
+    create_resolver, has_js_imports, is_node_builtin, is_relative_import, resolve_entry,
+    resolve_specifier,
 };
-use crate::{PackageInfo, TraceError, TraceOptions, TraceOutput};
+use crate::{PackageInfo, TraceError, TraceOptions, TraceOutput, UnresolvedImport};
 
 /// Result of parsing a single file: its internal and external imports.
 struct ParseResult {
@@ -41,6 +42,8 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
 
     // Cross-package BFS: resolve externals, trace each new package, repeat.
     let mut packages_map: HashMap<PathBuf, PackageInfo> = HashMap::new();
+    // Collect specifiers that could not be resolved (phantom dependencies).
+    let mut unresolved: Vec<UnresolvedImport> = Vec::new();
 
     // Seed with app externals, resolved from app_root.
     let mut pending: Vec<(String, PathBuf)> = app_externals
@@ -59,7 +62,22 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
         let mut new_traces: Vec<(PathBuf, PathBuf, Vec<PathBuf>)> = Vec::new();
 
         for (specifier, resolve_from) in batch {
-            let resolved = resolve_specifier(&resolver, &resolve_from, &specifier)?;
+            let resolved = match resolve_specifier(&resolver, &resolve_from, &specifier) {
+                Ok(r) => r,
+                Err(TraceError::ResolveError { .. }) => {
+                    // Resolution failed. If it's a known Node.js builtin, silently
+                    // skip — it won't exist in node_modules. Otherwise it's a
+                    // phantom/undeclared dependency.
+                    if !is_node_builtin(&specifier) {
+                        unresolved.push(UnresolvedImport {
+                            specifier,
+                            resolve_from,
+                        });
+                    }
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
 
             // resolved.directory is already canonical from resolve_specifier.
             let canonical_dir = &resolved.directory;
@@ -111,7 +129,10 @@ pub fn trace(options: TraceOptions) -> Result<TraceOutput, TraceError> {
 
     let packages: Vec<PackageInfo> = packages_map.into_values().collect();
 
-    Ok(TraceOutput { packages })
+    Ok(TraceOutput {
+        packages,
+        unresolved,
+    })
 }
 
 /// Trace a single package using wavefront BFS.
