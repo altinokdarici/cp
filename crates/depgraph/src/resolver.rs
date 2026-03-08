@@ -51,10 +51,8 @@ pub fn is_relative_import(specifier: &str) -> bool {
 /// than reporting it as unresolved. If it IS in node_modules, we trace it
 /// normally (even if the name matches a builtin).
 pub fn is_node_builtin(specifier: &str) -> bool {
-    if specifier.starts_with("node:") {
-        return true;
-    }
-    let base = specifier.split('/').next().unwrap_or(specifier);
+    let effective = specifier.strip_prefix("node:").unwrap_or(specifier);
+    let base = effective.split('/').next().unwrap_or(effective);
     matches!(
         base,
         "assert"
