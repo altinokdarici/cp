@@ -120,14 +120,19 @@ fn compute_chunk_plan(graph: &ModuleGraph) -> Result<ChunkPlan<'_>, String> {
     let mut shared_chunks: Vec<SharedChunk<'_>> = Vec::new();
     for (entry_indices, mut modules) in shared_groups {
         modules.sort();
-        let name = format!(
-            "chunk-{}",
-            entry_indices
-                .iter()
-                .map(|i| i.to_string())
-                .collect::<Vec<_>>()
-                .join("-")
-        );
+        let indices_str = entry_indices
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join("-");
+        // Keep chunk names under 200 chars to avoid OS filename limits.
+        // If too long, truncate and append a short hash for uniqueness.
+        let name = if indices_str.len() > 190 {
+            let hash = simple_hash(&indices_str);
+            format!("chunk-{:.180}-{hash:08x}", indices_str)
+        } else {
+            format!("chunk-{indices_str}")
+        };
         shared_chunks.push(SharedChunk {
             name,
             entry_indices,
@@ -401,4 +406,14 @@ fn push_safe_identifier(output: &mut String, specifier: &str) {
             output.push('_');
         }
     }
+}
+
+/// FNV-1a hash for generating short deterministic hashes from strings.
+fn simple_hash(s: &str) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for b in s.bytes() {
+        h ^= u32::from(b);
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
 }
