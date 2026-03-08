@@ -35,7 +35,8 @@ impl<'a> Visit<'a> for ImportCollector {
         {
             self.specifiers.push(lit.value.to_string());
         }
-        // Continue walking to find nested require() calls.
+        // Continue walking callee and arguments to find nested require() calls.
+        self.visit_expression(&expr.callee);
         for arg in &expr.arguments {
             self.visit_argument(arg);
         }
@@ -46,5 +47,7 @@ impl<'a> Visit<'a> for ImportCollector {
         if let Expression::StringLiteral(lit) = &expr.source {
             self.specifiers.push(lit.value.to_string());
         }
+        // Continue walking to find nested imports/requires within the source expression.
+        self.visit_expression(&expr.source);
     }
 }
