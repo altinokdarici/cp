@@ -86,6 +86,7 @@ pub fn is_node_builtin(specifier: &str) -> bool {
             | "stream"
             | "string_decoder"
             | "sys"
+            | "test"
             | "timers"
             | "tls"
             | "trace_events"

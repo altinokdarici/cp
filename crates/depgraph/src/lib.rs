@@ -28,7 +28,7 @@ pub struct TraceOutput {
 /// An import specifier found in source code that could not be resolved.
 #[derive(Debug)]
 pub struct UnresolvedImport {
-    /// The bare specifier that failed to resolve.
+    /// The import specifier that failed to resolve.
     pub specifier: String,
     /// The package directory from which resolution was attempted.
     pub resolve_from: PathBuf,
