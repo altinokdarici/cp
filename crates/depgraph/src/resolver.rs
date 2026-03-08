@@ -8,10 +8,14 @@ use crate::TraceError;
 pub struct ResolvedPackage {
     pub name: String,
     pub version: String,
-    /// The directory containing package.json (the package root).
+    /// The canonical directory containing package.json (for dedup).
     pub directory: PathBuf,
     /// The resolved file path relative to the package root.
     pub entry_relative: PathBuf,
+    /// The realpath-derived directory used as the base for resolving transitive deps.
+    /// In pnpm layouts this points inside `.pnpm/pkg@ver/node_modules/pkg/` where
+    /// sibling node_modules are visible for dependency resolution.
+    pub resolve_dir: PathBuf,
 }
 
 /// Create an oxc_resolver with the standard config for import tracing.
@@ -113,18 +117,29 @@ pub fn resolve_specifier(
         })?
         .to_string();
 
-    let directory = pkg_json
+    let pkg_dir = pkg_json
         .path
         .parent()
         .ok_or_else(|| TraceError::PackageMetadataError {
             path: pkg_json.path.display().to_string(),
             message: "package.json has no parent directory".to_string(),
-        })?
-        .canonicalize()
-        .map_err(|e| TraceError::IoError {
-            path: pkg_json.path.display().to_string(),
-            message: e.to_string(),
         })?;
+
+    let directory = pkg_dir.canonicalize().map_err(|e| TraceError::IoError {
+        path: pkg_json.path.display().to_string(),
+        message: e.to_string(),
+    })?;
+
+    // Use realpath for resolve_dir so pnpm's .pnpm/pkg@ver/node_modules/
+    // layout is visible for resolving transitive dependencies.
+    let resolve_dir = pkg_json
+        .realpath
+        .parent()
+        .ok_or_else(|| TraceError::PackageMetadataError {
+            path: pkg_json.realpath.display().to_string(),
+            message: "package.json realpath has no parent directory".to_string(),
+        })?
+        .to_path_buf();
 
     let full_path = resolution.into_path_buf();
     let entry_relative = full_path
@@ -144,6 +159,7 @@ pub fn resolve_specifier(
         version,
         directory,
         entry_relative,
+        resolve_dir,
     })
 }
 
