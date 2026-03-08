@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772944798832,
+  "lastUpdate": 1772988174367,
   "repoUrl": "https://github.com/altinokdarici/cp",
   "entries": {
     "Benchmark": [
@@ -629,6 +629,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "depgraph::large (100 modules, 50 packages)",
             "value": 13802925,
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "altinokd@outlook.com",
+            "name": "Altinok Darici",
+            "username": "altinokdarici"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3ebf8962b2c2fa9727ff135ec397be42e4087633",
+          "message": "Add CodeQL analysis workflowchore: add CodeQL advancchore: add CodeQL advanced workflow for PR scanning (#19)ed workflow for PR scanning (#19)\n\nThis workflow file sets up CodeQL analysis for the repository, specifying the languages to be analyzed and the conditions for triggering the analysis.Switches CodeQL from Default setup to Advanced setup with a workflow file that triggers on both push to main and pull_request targeting main, unblocking PR merges that require CodeQL code scanning results.",
+          "timestamp": "2026-03-08T09:42:18-07:00",
+          "tree_id": "9e56732dd96be7de75eb2c1a9c173e922cd8683a",
+          "url": "https://github.com/altinokdarici/cp/commit/3ebf8962b2c2fa9727ff135ec397be42e4087633"
+        },
+        "date": 1772988173976,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "small (20 modules, 2 entries)",
+            "value": 897396,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "medium (100 modules, 5 entries)",
+            "value": 3560981,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "large (500 modules, 10 entries)",
+            "value": 17603502,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::small (10 modules, 5 packages)",
+            "value": 1048769,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::medium (50 modules, 20 packages)",
+            "value": 3980053,
+            "unit": "ns/iter"
+          },
+          {
+            "name": "depgraph::large (100 modules, 50 packages)",
+            "value": 14093520,
             "unit": "ns/iter"
           }
         ]
