@@ -98,6 +98,7 @@ pub fn build_module_graph(
         ".jsx".into(),
         ".mjs".into(),
         ".json".into(),
+        ".resjson".into(),
         ".css".into(),
     ];
     // Append all loader-registered extensions (assets, etc.) so the resolver

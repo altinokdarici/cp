@@ -25,6 +25,7 @@ pub fn create_resolver() -> Resolver {
             ".jsx".into(),
             ".mjs".into(),
             ".json".into(),
+            ".resjson".into(),
             ".css".into(),
         ],
         main_fields: vec!["module".into(), "main".into()],

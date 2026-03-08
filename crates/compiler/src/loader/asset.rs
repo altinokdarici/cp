@@ -11,6 +11,7 @@ pub struct AssetLoader;
 /// Extensions handled by the asset loader and their MIME types.
 /// Single source of truth — used by both `extensions()` and `load()`.
 const ASSET_TYPES: &[(&str, &str)] = &[
+    // Images
     ("png", "image/png"),
     ("jpg", "image/jpeg"),
     ("jpeg", "image/jpeg"),
@@ -19,16 +20,27 @@ const ASSET_TYPES: &[(&str, &str)] = &[
     ("avif", "image/avif"),
     ("ico", "image/x-icon"),
     ("bmp", "image/bmp"),
+    // Fonts
     ("woff", "font/woff"),
     ("woff2", "font/woff2"),
     ("ttf", "font/ttf"),
     ("eot", "application/vnd.ms-fontobject"),
     ("otf", "font/otf"),
+    // Audio
+    ("mp3", "audio/mpeg"),
+    ("wav", "audio/wav"),
+    ("ogg", "audio/ogg"),
+    ("flac", "audio/flac"),
+    ("aac", "audio/aac"),
+    // Video
+    ("mp4", "video/mp4"),
+    ("webm", "video/webm"),
 ];
 
 /// Flattened extension list for the `Loader` trait.
 const ASSET_EXTENSIONS: &[&str] = &[
-    "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "woff", "woff2", "ttf", "eot", "otf",
+    "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "woff", "woff2", "ttf", "eot",
+    "otf", "mp3", "wav", "ogg", "flac", "aac", "mp4", "webm",
 ];
 
 impl Loader for AssetLoader {

@@ -6,7 +6,7 @@ pub struct JsonLoader;
 
 impl Loader for JsonLoader {
     fn extensions(&self) -> &[&str] {
-        &["json"]
+        &["json", "resjson"]
     }
 
     fn load(&self, _path: &Path, content: String) -> Result<LoadResult, String> {
